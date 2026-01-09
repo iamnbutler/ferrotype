@@ -686,3 +686,287 @@ export class RpcClient {
     return this.config;
   }
 }
+
+// ============================================================================
+// Option Type - Rust's Option<T> as a TypeScript discriminated union
+// ============================================================================
+
+/**
+ * Represents the Some variant of an Option, containing a value.
+ * Corresponds to Rust's `Some(T)` serialized with serde's externally-tagged format.
+ */
+export interface Some<T> {
+  readonly Some: T;
+}
+
+/**
+ * Represents the None variant of an Option.
+ * Corresponds to Rust's `None` serialized with serde's externally-tagged format.
+ */
+export interface None {
+  readonly None: null;
+}
+
+/**
+ * A discriminated union representing an optional value.
+ * Mirrors Rust's Option<T> type with serde's externally-tagged serialization.
+ *
+ * @example
+ * // From Rust: Option::Some("hello")
+ * const some: Option<string> = { Some: "hello" };
+ *
+ * // From Rust: Option::None
+ * const none: Option<string> = { None: null };
+ */
+export type Option<T> = Some<T> | None;
+
+// ============================================================================
+// Option Constructors
+// ============================================================================
+
+/**
+ * Creates a Some variant containing the given value.
+ *
+ * @example
+ * const opt = some("hello"); // { Some: "hello" }
+ */
+export function some<T>(value: T): Some<T> {
+  return { Some: value };
+}
+
+/**
+ * Creates a None variant.
+ *
+ * @example
+ * const opt = none<string>(); // { None: null }
+ */
+export function none<_T = never>(): None {
+  return { None: null };
+}
+
+// ============================================================================
+// Option Type Guards
+// ============================================================================
+
+/**
+ * Type guard that checks if an Option is Some.
+ *
+ * @example
+ * const opt: Option<number> = some(42);
+ * if (isSome(opt)) {
+ *   console.log(opt.Some); // TypeScript knows opt.Some exists
+ * }
+ */
+export function isSome<T>(option: Option<T>): option is Some<T> {
+  return "Some" in option;
+}
+
+/**
+ * Type guard that checks if an Option is None.
+ *
+ * @example
+ * const opt: Option<number> = none();
+ * if (isNone(opt)) {
+ *   console.log("No value");
+ * }
+ */
+export function isNone<T>(option: Option<T>): option is None {
+  return "None" in option;
+}
+
+// ============================================================================
+// Option <-> Nullable Conversions
+// ============================================================================
+
+/**
+ * Converts an Option<T> to T | null.
+ * This is the primary way to work with optional values in idiomatic TypeScript.
+ *
+ * @example
+ * const opt: Option<string> = some("hello");
+ * const value: string | null = optionToNullable(opt); // "hello"
+ *
+ * const noneOpt: Option<string> = none();
+ * const nullValue: string | null = optionToNullable(noneOpt); // null
+ */
+export function optionToNullable<T>(option: Option<T>): T | null {
+  if (isSome(option)) {
+    return option.Some;
+  }
+  return null;
+}
+
+/**
+ * Converts a nullable value (T | null | undefined) to Option<T>.
+ * Useful when sending data back to Rust that expects Option<T>.
+ *
+ * @example
+ * const value: string | null = "hello";
+ * const opt: Option<string> = nullableToOption(value); // { Some: "hello" }
+ *
+ * const nullValue: string | null = null;
+ * const noneOpt: Option<string> = nullableToOption(nullValue); // { None: null }
+ */
+export function nullableToOption<T>(value: T | null | undefined): Option<T> {
+  if (value === null || value === undefined) {
+    return none();
+  }
+  return some(value);
+}
+
+// ============================================================================
+// Option Utilities
+// ============================================================================
+
+/**
+ * Extracts the value from a Some, or throws if None.
+ * Use only when you are certain the option is Some.
+ *
+ * @example
+ * const opt = some(42);
+ * const value = unwrapOption(opt); // 42
+ *
+ * const noneOpt = none<number>();
+ * unwrapOption(noneOpt); // throws Error
+ */
+export function unwrapOption<T>(option: Option<T>): T {
+  if (isSome(option)) {
+    return option.Some;
+  }
+  throw new Error("Called unwrapOption on a None value");
+}
+
+/**
+ * Extracts the value from a Some, or returns the provided default.
+ *
+ * @example
+ * const opt: Option<number> = none();
+ * const value = unwrapOptionOr(opt, 0); // 0
+ */
+export function unwrapOptionOr<T>(option: Option<T>, defaultValue: T): T {
+  if (isSome(option)) {
+    return option.Some;
+  }
+  return defaultValue;
+}
+
+/**
+ * Extracts the value from a Some, or computes it from a function.
+ *
+ * @example
+ * const opt: Option<number> = none();
+ * const value = unwrapOptionOrElse(opt, () => computeDefault()); // result of computeDefault()
+ */
+export function unwrapOptionOrElse<T>(option: Option<T>, fn: () => T): T {
+  if (isSome(option)) {
+    return option.Some;
+  }
+  return fn();
+}
+
+/**
+ * Maps an Option<T> to Option<U> by applying a function to the Some value.
+ *
+ * @example
+ * const opt: Option<number> = some(5);
+ * const doubled = mapOption(opt, x => x * 2); // { Some: 10 }
+ *
+ * const noneOpt: Option<number> = none();
+ * const mapped = mapOption(noneOpt, x => x * 2); // { None: null }
+ */
+export function mapOption<T, U>(option: Option<T>, fn: (value: T) => U): Option<U> {
+  if (isSome(option)) {
+    return some(fn(option.Some));
+  }
+  return option;
+}
+
+/**
+ * Maps an Option<T> to Option<U>, where the mapping function also returns an Option.
+ * Flattens the result (avoids Option<Option<U>>).
+ *
+ * @example
+ * const opt: Option<string> = some("42");
+ * const parsed = flatMapOption(opt, s => {
+ *   const n = parseInt(s, 10);
+ *   return isNaN(n) ? none() : some(n);
+ * }); // { Some: 42 }
+ */
+export function flatMapOption<T, U>(option: Option<T>, fn: (value: T) => Option<U>): Option<U> {
+  if (isSome(option)) {
+    return fn(option.Some);
+  }
+  return none();
+}
+
+/**
+ * Pattern matches on an Option, calling the appropriate handler.
+ *
+ * @example
+ * const opt: Option<number> = some(42);
+ * const result = matchOption(opt, {
+ *   some: (n) => `Got ${n}`,
+ *   none: () => "Nothing",
+ * }); // "Got 42"
+ */
+export function matchOption<T, U>(
+  option: Option<T>,
+  handlers: {
+    some: (value: T) => U;
+    none: () => U;
+  }
+): U {
+  if (isSome(option)) {
+    return handlers.some(option.Some);
+  }
+  return handlers.none();
+}
+
+/**
+ * Filters an Option by a predicate. Returns None if the predicate is false.
+ *
+ * @example
+ * const opt: Option<number> = some(5);
+ * const filtered = filterOption(opt, n => n > 3); // { Some: 5 }
+ * const filteredOut = filterOption(opt, n => n > 10); // { None: null }
+ */
+export function filterOption<T>(option: Option<T>, predicate: (value: T) => boolean): Option<T> {
+  if (isSome(option) && predicate(option.Some)) {
+    return option;
+  }
+  return none();
+}
+
+/**
+ * Converts an Option<T> to a Result<T, E> with the given error if None.
+ *
+ * @example
+ * const opt: Option<number> = some(42);
+ * const result = optionToResult(opt, "No value"); // { ok: true, value: 42 }
+ *
+ * const noneOpt: Option<number> = none();
+ * const errResult = optionToResult(noneOpt, "No value"); // { ok: false, error: "No value" }
+ */
+export function optionToResult<T, E>(option: Option<T>, error: E): Result<T, E> {
+  if (isSome(option)) {
+    return ok(option.Some);
+  }
+  return err(error);
+}
+
+/**
+ * Converts a Result<T, E> to an Option<T>, discarding the error.
+ *
+ * @example
+ * const result: Result<number, string> = ok(42);
+ * const opt = resultToOption(result); // { Some: 42 }
+ *
+ * const errResult: Result<number, string> = err("failed");
+ * const noneOpt = resultToOption(errResult); // { None: null }
+ */
+export function resultToOption<T, E>(result: Result<T, E>): Option<T> {
+  if (result.ok) {
+    return some(result.value);
+  }
+  return none();
+}
