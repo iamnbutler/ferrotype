@@ -399,3 +399,290 @@ export function enumGuards<Union extends { readonly type: string }>(
 
   return guards;
 }
+
+// ============================================================================
+// RPC Client - Base class for type-safe RPC calls
+// ============================================================================
+
+/**
+ * Configuration for the RPC client.
+ */
+export interface RpcClientConfig {
+  /** Base URL for the RPC endpoint (e.g., "http://localhost:8080/rpc") */
+  readonly baseUrl: string;
+  /** Optional custom headers to include with every request */
+  readonly headers?: Record<string, string>;
+  /** Optional timeout in milliseconds (default: 30000) */
+  readonly timeout?: number;
+}
+
+/**
+ * RPC error types that can occur during a call.
+ */
+export type RpcClientError =
+  | { readonly type: "NetworkError"; readonly message: string }
+  | { readonly type: "TimeoutError"; readonly message: string }
+  | { readonly type: "ParseError"; readonly message: string; readonly body: string }
+  | { readonly type: "HttpError"; readonly status: number; readonly statusText: string; readonly body: string }
+  | { readonly type: "ServerError"; readonly error: unknown };
+
+/**
+ * Creates a NetworkError.
+ */
+export function networkError(message: string): RpcClientError {
+  return { type: "NetworkError", message };
+}
+
+/**
+ * Creates a TimeoutError.
+ */
+export function timeoutError(message: string): RpcClientError {
+  return { type: "TimeoutError", message };
+}
+
+/**
+ * Creates a ParseError.
+ */
+export function parseError(message: string, body: string): RpcClientError {
+  return { type: "ParseError", message, body };
+}
+
+/**
+ * Creates an HttpError.
+ */
+export function httpError(status: number, statusText: string, body: string): RpcClientError {
+  return { type: "HttpError", status, statusText, body };
+}
+
+/**
+ * Creates a ServerError.
+ */
+export function serverError(error: unknown): RpcClientError {
+  return { type: "ServerError", error };
+}
+
+/**
+ * Type guard for RpcClientError variants.
+ */
+export function isNetworkError(e: RpcClientError): e is { type: "NetworkError"; message: string } {
+  return e.type === "NetworkError";
+}
+
+export function isTimeoutError(e: RpcClientError): e is { type: "TimeoutError"; message: string } {
+  return e.type === "TimeoutError";
+}
+
+export function isParseError(e: RpcClientError): e is { type: "ParseError"; message: string; body: string } {
+  return e.type === "ParseError";
+}
+
+export function isHttpError(e: RpcClientError): e is { type: "HttpError"; status: number; statusText: string; body: string } {
+  return e.type === "HttpError";
+}
+
+export function isServerError(e: RpcClientError): e is { type: "ServerError"; error: unknown } {
+  return e.type === "ServerError";
+}
+
+/**
+ * Wire format for RPC requests.
+ * Matches the expected format on the Rust side.
+ */
+export interface RpcRequest<T = unknown> {
+  readonly method: string;
+  readonly params: T;
+}
+
+/**
+ * Wire format for RPC responses.
+ * Matches the format produced by the Rust side.
+ */
+export type RpcResponse<T, E> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: E };
+
+/**
+ * Transport interface for making RPC requests.
+ * Can be implemented for different environments (fetch, Node.js, mock, etc.)
+ */
+export interface RpcTransport {
+  /**
+   * Sends an RPC request and returns the raw response body.
+   * @param url The full URL to send the request to
+   * @param body The JSON-stringified request body
+   * @param headers Headers to include with the request
+   * @param timeout Request timeout in milliseconds
+   * @returns Promise resolving to the response body string, or rejecting with RpcClientError
+   */
+  send(
+    url: string,
+    body: string,
+    headers: Record<string, string>,
+    timeout: number
+  ): Promise<Result<string, RpcClientError>>;
+}
+
+/**
+ * Default transport using the Fetch API.
+ */
+export class FetchTransport implements RpcTransport {
+  async send(
+    url: string,
+    body: string,
+    headers: Record<string, string>,
+    timeout: number
+  ): Promise<Result<string, RpcClientError>> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...headers,
+        },
+        body,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const responseBody = await response.text();
+
+      if (!response.ok) {
+        return err(httpError(response.status, response.statusText, responseBody));
+      }
+
+      return ok(responseBody);
+    } catch (e) {
+      clearTimeout(timeoutId);
+
+      if (e instanceof Error) {
+        if (e.name === "AbortError") {
+          return err(timeoutError(`Request timed out after ${timeout}ms`));
+        }
+        return err(networkError(e.message));
+      }
+      return err(networkError("Unknown network error"));
+    }
+  }
+}
+
+/**
+ * Base RPC client providing type-safe method calls.
+ *
+ * @example
+ * ```typescript
+ * const client = new RpcClient({ baseUrl: "http://localhost:8080/rpc" });
+ *
+ * // Type-safe call with explicit types
+ * const result = await client.call<GetUserResponse, ApiError>("get_user", { user_id: 123 });
+ *
+ * if (result.ok) {
+ *   console.log(result.value.user);
+ * } else {
+ *   console.error(result.error);
+ * }
+ * ```
+ */
+export class RpcClient {
+  private readonly config: Required<RpcClientConfig>;
+  private readonly transport: RpcTransport;
+
+  constructor(config: RpcClientConfig, transport?: RpcTransport) {
+    this.config = {
+      baseUrl: config.baseUrl,
+      headers: config.headers ?? {},
+      timeout: config.timeout ?? 30000,
+    };
+    this.transport = transport ?? new FetchTransport();
+  }
+
+  /**
+   * Calls an RPC method with type-safe request and response types.
+   *
+   * @typeParam TResponse - The expected response type on success
+   * @typeParam TError - The expected error type from the server
+   * @typeParam TRequest - The request parameters type (usually inferred)
+   *
+   * @param method - The RPC method name to call
+   * @param params - The parameters to send with the request
+   *
+   * @returns A Result containing either:
+   *   - Ok<TResponse> on success
+   *   - Err<RpcClientError | TError> on failure (client error or server error)
+   */
+  async call<TResponse, TError = unknown, TRequest = unknown>(
+    method: string,
+    params: TRequest
+  ): Promise<Result<TResponse, RpcClientError | TError>> {
+    const request: RpcRequest<TRequest> = { method, params };
+    const body = JSON.stringify(request);
+
+    const transportResult = await this.transport.send(
+      this.config.baseUrl,
+      body,
+      this.config.headers,
+      this.config.timeout
+    );
+
+    if (!transportResult.ok) {
+      return transportResult;
+    }
+
+    let parsed: RpcResponse<TResponse, TError>;
+    try {
+      parsed = JSON.parse(transportResult.value) as RpcResponse<TResponse, TError>;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "JSON parse error";
+      return err(parseError(message, transportResult.value));
+    }
+
+    if (parsed.ok) {
+      return ok(parsed.value);
+    } else {
+      return err(parsed.error);
+    }
+  }
+
+  /**
+   * Creates a new client with additional headers merged with existing ones.
+   * Useful for adding authentication tokens.
+   *
+   * @param headers - Headers to add or override
+   * @returns A new RpcClient instance with merged headers
+   */
+  withHeaders(headers: Record<string, string>): RpcClient {
+    return new RpcClient(
+      {
+        ...this.config,
+        headers: { ...this.config.headers, ...headers },
+      },
+      this.transport
+    );
+  }
+
+  /**
+   * Creates a new client with a different timeout.
+   *
+   * @param timeout - New timeout in milliseconds
+   * @returns A new RpcClient instance with the new timeout
+   */
+  withTimeout(timeout: number): RpcClient {
+    return new RpcClient(
+      {
+        ...this.config,
+        timeout,
+      },
+      this.transport
+    );
+  }
+
+  /**
+   * Gets the current configuration (read-only).
+   */
+  getConfig(): Readonly<Required<RpcClientConfig>> {
+    return this.config;
+  }
+}
