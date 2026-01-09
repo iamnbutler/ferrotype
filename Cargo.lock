@@ -70,6 +70,7 @@ name = "ferrotype-fixtures"
 version = "0.1.0"
 dependencies = [
  "ferrotype",
+ "ferrotype-derive",
  "serde",
  "serde_json",
 ]

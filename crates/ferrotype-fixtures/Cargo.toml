@@ -7,6 +7,7 @@ description = "Test fixture types for ferrotype codegen testing"
 
 [dependencies]
 ferrotype = { path = "../ferrotype" }
+ferrotype-derive = { path = "../ferrotype-derive" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
