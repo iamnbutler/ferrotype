@@ -213,3 +213,189 @@ export function match<T, E, U>(
   }
   return handlers.err(result.error);
 }
+
+// ============================================================================
+// Struct Variant Enum Codegen - Discriminated unions for Rust enum struct variants
+// ============================================================================
+
+/**
+ * Base type for a struct variant with a discriminant tag and named fields.
+ * Represents a Rust enum variant with struct fields, e.g.:
+ *   enum Message { Move { x: i32, y: i32 } }
+ * becomes:
+ *   type Message = { type: "Move"; x: number; y: number }
+ */
+export type StructVariant<
+  Tag extends string,
+  Fields extends Record<string, unknown>
+> = { readonly type: Tag } & { readonly [K in keyof Fields]: Fields[K] };
+
+/**
+ * Creates a struct variant instance with the given tag and fields.
+ *
+ * @example
+ * type Move = StructVariant<"Move", { x: number; y: number }>;
+ * const move: Move = structVariant("Move", { x: 10, y: 20 });
+ */
+export function structVariant<
+  Tag extends string,
+  Fields extends Record<string, unknown>
+>(tag: Tag, fields: Fields): StructVariant<Tag, Fields> {
+  return { type: tag, ...fields } as StructVariant<Tag, Fields>;
+}
+
+/**
+ * Type guard that checks if a discriminated union value has the given tag.
+ *
+ * @example
+ * type Message = Move | Write;
+ * if (isStructVariant(msg, "Move")) {
+ *   console.log(msg.x, msg.y); // TypeScript knows msg has x and y
+ * }
+ */
+export function isStructVariant<
+  Union extends { readonly type: string },
+  Tag extends Union["type"]
+>(value: Union, tag: Tag): value is Extract<Union, { type: Tag }> {
+  return value.type === tag;
+}
+
+/**
+ * Exhaustively matches on a discriminated union, calling the appropriate handler.
+ *
+ * @example
+ * type Message =
+ *   | StructVariant<"Move", { x: number; y: number }>
+ *   | StructVariant<"Write", { text: string }>
+ *   | StructVariant<"Quit", {}>;
+ *
+ * const result = matchEnum(message, {
+ *   Move: (m) => `Moving to ${m.x}, ${m.y}`,
+ *   Write: (w) => `Writing: ${w.text}`,
+ *   Quit: () => "Quitting",
+ * });
+ */
+export function matchEnum<
+  Union extends { readonly type: string },
+  Handlers extends {
+    [K in Union["type"]]: (
+      variant: Extract<Union, { type: K }>
+    ) => unknown;
+  },
+  ReturnType = Handlers[Union["type"]] extends (arg: never) => infer R
+    ? R
+    : never
+>(value: Union, handlers: Handlers): ReturnType {
+  const handler = handlers[value.type as Union["type"]];
+  return handler(value as Extract<Union, { type: Union["type"] }>) as ReturnType;
+}
+
+// ============================================================================
+// Enum Variant Constructors - Factory functions for creating variants
+// ============================================================================
+
+/**
+ * Creates a factory function for constructing struct variants of a specific tag.
+ * Useful for creating typed constructors for each variant of an enum.
+ *
+ * @example
+ * const Move = variantConstructor<Message, "Move">("Move");
+ * const msg: Message = Move({ x: 10, y: 20 });
+ */
+export function variantConstructor<
+  Union extends { readonly type: string },
+  Tag extends Union["type"]
+>(
+  tag: Tag
+): (
+  fields: Omit<Extract<Union, { type: Tag }>, "type">
+) => Extract<Union, { type: Tag }> {
+  return (fields) => ({ type: tag, ...fields }) as Extract<Union, { type: Tag }>;
+}
+
+/**
+ * Creates an object containing constructor functions for all variants of an enum.
+ * Each constructor is named after its variant tag.
+ *
+ * @example
+ * type Message =
+ *   | StructVariant<"Move", { x: number; y: number }>
+ *   | StructVariant<"Write", { text: string }>;
+ *
+ * const Message = enumConstructors<Message>(["Move", "Write"]);
+ * const msg = Message.Move({ x: 10, y: 20 });
+ */
+export function enumConstructors<Union extends { readonly type: string }>(
+  tags: readonly Union["type"][]
+): {
+  [K in Union["type"]]: (
+    fields: Omit<Extract<Union, { type: K }>, "type">
+  ) => Extract<Union, { type: K }>;
+} {
+  const constructors = {} as {
+    [K in Union["type"]]: (
+      fields: Omit<Extract<Union, { type: K }>, "type">
+    ) => Extract<Union, { type: K }>;
+  };
+
+  for (const tag of tags) {
+    (constructors as Record<string, unknown>)[tag] = (
+      fields: Record<string, unknown>
+    ) => ({ type: tag, ...fields });
+  }
+
+  return constructors;
+}
+
+// ============================================================================
+// Enum Type Guards - Runtime checks for variant discrimination
+// ============================================================================
+
+/**
+ * Creates a type guard function for a specific variant tag.
+ *
+ * @example
+ * const isMove = variantGuard<Message, "Move">("Move");
+ * if (isMove(msg)) {
+ *   console.log(msg.x, msg.y);
+ * }
+ */
+export function variantGuard<
+  Union extends { readonly type: string },
+  Tag extends Union["type"]
+>(tag: Tag): (value: Union) => value is Extract<Union, { type: Tag }> {
+  return (value): value is Extract<Union, { type: Tag }> => value.type === tag;
+}
+
+/**
+ * Creates an object containing type guard functions for all variants of an enum.
+ *
+ * @example
+ * type Message =
+ *   | StructVariant<"Move", { x: number; y: number }>
+ *   | StructVariant<"Write", { text: string }>;
+ *
+ * const is = enumGuards<Message>(["Move", "Write"]);
+ * if (is.Move(msg)) {
+ *   console.log(msg.x, msg.y);
+ * }
+ */
+export function enumGuards<Union extends { readonly type: string }>(
+  tags: readonly Union["type"][]
+): {
+  [K in Union["type"]]: (value: Union) => value is Extract<Union, { type: K }>;
+} {
+  const guards = {} as {
+    [K in Union["type"]]: (
+      value: Union
+    ) => value is Extract<Union, { type: K }>;
+  };
+
+  for (const tag of tags) {
+    (guards as Record<string, unknown>)[tag] = (
+      value: { readonly type: string }
+    ) => value.type === tag;
+  }
+
+  return guards;
+}
