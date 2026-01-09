@@ -88,6 +88,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hello-world"
+version = "0.1.0"
+dependencies = [
+ "ferrotype",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "insta"
 version = "1.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
