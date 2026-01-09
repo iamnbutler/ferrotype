@@ -1,13 +1,18 @@
 //! Hello World RPC Server
 //!
-//! The simplest possible ferrotype RPC example:
-//! - No arguments
-//! - Returns a string
+//! A real HTTP server demonstrating ferrotype type mapping:
+//! - Axum server on an actual port
+//! - GET /rpc/hello endpoint
+//! - Returns JSON response
 //!
-//! This demonstrates the type mapping between Rust and TypeScript.
+//! Run with: cargo run -p hello-world
+//! Test with: curl http://localhost:3000/rpc/hello
 
+use axum::{routing::get, Json, Router};
 use ferrotype::TypeScriptType;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
+use tower_http::cors::{Any, CorsLayer};
 
 /// Response from the hello RPC method.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -32,17 +37,39 @@ pub fn hello() -> HelloResponse {
     }
 }
 
-fn main() {
-    // Simulate an RPC server responding to a "hello" request.
-    // In a real server, this would be over HTTP/WebSocket/etc.
-    let response = hello();
-    let json = serde_json::to_string(&response).expect("serialize response");
+/// HTTP handler for GET /rpc/hello
+async fn hello_handler() -> Json<HelloResponse> {
+    Json(hello())
+}
 
-    // Output the JSON response (simulating what a real RPC server would send)
-    println!("{}", json);
+/// Create the router with all RPC endpoints.
+pub fn create_router() -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
 
-    // Also print the TypeScript type for reference
-    eprintln!("TypeScript type: {}", HelloResponse::typescript_type());
+    Router::new()
+        .route("/rpc/hello", get(hello_handler))
+        .layer(cors)
+}
+
+#[tokio::main]
+async fn main() {
+    let app = create_router();
+
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(3000);
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    println!("Hello World RPC server listening on http://{}", addr);
+    println!("Try: curl http://{}/rpc/hello", addr);
+    println!("TypeScript type: {}", HelloResponse::typescript_type());
+
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 #[cfg(test)]
@@ -74,5 +101,89 @@ mod tests {
     fn test_typescript_type() {
         assert_eq!(HelloResponse::typescript_type(), "{ message: string }");
         assert_eq!(HelloResponse::typescript_name(), "HelloResponse");
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// Start the server on a random available port and return the base URL.
+    async fn start_test_server() -> (String, tokio::task::JoinHandle<()>) {
+        let app = create_router();
+
+        // Bind to port 0 to get a random available port
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base_url = format!("http://{}", addr);
+
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        // Give the server a moment to start
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        (base_url, handle)
+    }
+
+    #[tokio::test]
+    async fn test_real_http_hello() {
+        let (base_url, _handle) = start_test_server().await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(format!("{}/rpc/hello", base_url))
+            .send()
+            .await
+            .expect("request failed");
+
+        assert!(response.status().is_success());
+
+        let hello_response: HelloResponse = response.json().await.expect("parse json failed");
+        assert_eq!(hello_response.message, "Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_real_http_json_content_type() {
+        let (base_url, _handle) = start_test_server().await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(format!("{}/rpc/hello", base_url))
+            .send()
+            .await
+            .expect("request failed");
+
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .expect("no content-type header")
+            .to_str()
+            .unwrap();
+
+        assert!(content_type.contains("application/json"));
+    }
+
+    #[tokio::test]
+    async fn test_real_http_cors_headers() {
+        let (base_url, _handle) = start_test_server().await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(format!("{}/rpc/hello", base_url))
+            .header("Origin", "http://localhost:5173")
+            .send()
+            .await
+            .expect("request failed");
+
+        // CORS should allow any origin
+        let cors_header = response
+            .headers()
+            .get("access-control-allow-origin")
+            .expect("no CORS header");
+
+        assert_eq!(cors_header.to_str().unwrap(), "*");
     }
 }

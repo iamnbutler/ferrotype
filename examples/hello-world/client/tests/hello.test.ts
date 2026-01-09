@@ -1,4 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { spawn, ChildProcess } from "child_process";
+import { setTimeout } from "timers/promises";
 import {
   HelloResponse,
   isHelloResponse,
@@ -6,6 +8,7 @@ import {
   HelloClient,
 } from "../src/index.js";
 
+// Unit tests for type guards and parsing (no server needed)
 describe("HelloResponse", () => {
   describe("isHelloResponse", () => {
     it("returns true for valid HelloResponse", () => {
@@ -54,15 +57,64 @@ describe("HelloResponse", () => {
   });
 });
 
-describe("HelloClient", () => {
-  it("returns greeting from simulated server", async () => {
-    const client = new HelloClient();
+// Integration tests with real Rust server
+describe("HelloClient (real HTTP)", () => {
+  let serverProcess: ChildProcess | null = null;
+  const TEST_PORT = 13000 + Math.floor(Math.random() * 1000);
+  const BASE_URL = `http://localhost:${TEST_PORT}`;
+
+  beforeAll(async () => {
+    // Start the Rust server
+    serverProcess = spawn("cargo", ["run", "-p", "hello-world"], {
+      env: { ...process.env, PORT: String(TEST_PORT) },
+      cwd: "../../..",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    // Wait for server to be ready by polling the endpoint
+    const maxAttempts = 50;
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const response = await fetch(`${BASE_URL}/rpc/hello`);
+        if (response.ok) {
+          return; // Server is ready
+        }
+      } catch {
+        // Server not ready yet, wait and retry
+      }
+      await setTimeout(100);
+    }
+    throw new Error(`Server failed to start on port ${TEST_PORT}`);
+  }, 30000); // 30 second timeout for server startup
+
+  afterAll(() => {
+    if (serverProcess) {
+      serverProcess.kill("SIGTERM");
+      serverProcess = null;
+    }
+  });
+
+  it("makes real HTTP request to Rust server", async () => {
+    const client = new HelloClient(BASE_URL);
     const response = await client.hello();
     expect(response.message).toBe("Hello, World!");
   });
+
+  it("receives correct content-type header", async () => {
+    const response = await fetch(`${BASE_URL}/rpc/hello`);
+    expect(response.headers.get("content-type")).toContain("application/json");
+  });
+
+  it("handles CORS headers", async () => {
+    const response = await fetch(`${BASE_URL}/rpc/hello`, {
+      headers: { Origin: "http://localhost:5173" },
+    });
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  });
 });
 
-describe("Rust-TypeScript roundtrip", () => {
+// Type compatibility tests (no server needed)
+describe("Rust-TypeScript type compatibility", () => {
   it("TypeScript can parse JSON produced by Rust server", () => {
     // This is the exact JSON output from the Rust hello() function:
     // HelloResponse { message: "Hello, World!".to_string() }

@@ -3,7 +3,7 @@ name = "hello-world"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Simplest ferrotype RPC example - no args, returns string"
+description = "Simplest ferrotype RPC example - real HTTP server with no args, returns string"
 
 [[bin]]
 name = "hello-server"
@@ -13,3 +13,9 @@ path = "src/main.rs"
 ferrotype = { path = "../../crates/ferrotype" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json"] }

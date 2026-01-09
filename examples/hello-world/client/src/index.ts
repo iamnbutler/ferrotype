@@ -1,8 +1,9 @@
 /**
  * Hello World Client - TypeScript types matching the Rust server
  *
- * This demonstrates ferrotype's type mapping:
+ * This demonstrates ferrotype's type mapping with real HTTP:
  * - Rust `HelloResponse` struct maps to TypeScript interface
+ * - Real fetch calls to the Axum server
  * - JSON is the interchange format
  */
 
@@ -40,22 +41,33 @@ export function parseHelloResponse(json: string): HelloResponse {
 }
 
 /**
- * Simulated RPC client for the hello method.
- * In a real implementation, this would make an HTTP/WebSocket call to the Rust server.
+ * RPC client for the hello method.
+ * Makes real HTTP requests to the Rust Axum server.
  */
 export class HelloClient {
+  private readonly baseUrl: string;
+
+  /**
+   * Create a new HelloClient.
+   * @param baseUrl The base URL of the Rust server (e.g., "http://localhost:3000")
+   */
+  constructor(baseUrl: string = "http://localhost:3000") {
+    this.baseUrl = baseUrl;
+  }
+
   /**
    * Call the hello RPC method.
+   * Makes a real HTTP GET request to /rpc/hello.
    * Returns a greeting message from the server.
    */
   async hello(): Promise<HelloResponse> {
-    // In a real client, this would be:
-    // const response = await fetch('/rpc/hello');
-    // const json = await response.text();
-    // return parseHelloResponse(json);
+    const response = await fetch(`${this.baseUrl}/rpc/hello`);
 
-    // For this example, we simulate the server response
-    const serverResponse = '{"message":"Hello, World!"}';
-    return parseHelloResponse(serverResponse);
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+    }
+
+    const json = await response.text();
+    return parseHelloResponse(json);
   }
 }
