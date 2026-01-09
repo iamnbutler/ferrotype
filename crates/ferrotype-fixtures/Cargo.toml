@@ -1,0 +1,13 @@
+[package]
+name = "ferrotype-fixtures"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Test fixture types for ferrotype codegen testing"
+
+[dependencies]
+ferrotype = { path = "../ferrotype" }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
