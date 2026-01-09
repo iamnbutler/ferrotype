@@ -184,6 +184,79 @@ pub trait RpcService {
             methods.join(";\n")
         )
     }
+
+    /// Generates a TypeScript client class for this service.
+    ///
+    /// The generated client includes:
+    /// - Constructor with baseUrl and optional fetch function
+    /// - Type-safe methods for each RPC endpoint
+    /// - Automatic JSON serialization/deserialization
+    ///
+    /// # Example Output
+    ///
+    /// ```typescript
+    /// class UserServiceClient {
+    ///   private readonly baseUrl: string;
+    ///   private readonly fetch: typeof fetch;
+    ///
+    ///   constructor(baseUrl: string, fetchFn: typeof fetch = fetch) {
+    ///     this.baseUrl = baseUrl;
+    ///     this.fetch = fetchFn;
+    ///   }
+    ///
+    ///   async getUser(request: { id: string }): Promise<User> {
+    ///     const response = await this.fetch(`${this.baseUrl}/UserService/getUser`, {
+    ///       method: 'POST',
+    ///       headers: { 'Content-Type': 'application/json' },
+    ///       body: JSON.stringify(request),
+    ///     });
+    ///     if (!response.ok) {
+    ///       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    ///     }
+    ///     return response.json();
+    ///   }
+    /// }
+    /// ```
+    fn typescript_client() -> String {
+        let service_name = Self::service_name();
+        let class_name = format!("{}Client", service_name);
+
+        let methods: Vec<String> = Self::methods()
+            .iter()
+            .map(|m| {
+                format!(
+                    r#"  async {}(request: {}): Promise<{}> {{
+    const response = await this.fetch(`${{this.baseUrl}}/{}/{}`, {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify(request),
+    }});
+    if (!response.ok) {{
+      throw new Error(`HTTP ${{response.status}}: ${{response.statusText}}`);
+    }}
+    return response.json();
+  }}"#,
+                    m.name, m.request_type, m.response_type, service_name, m.name
+                )
+            })
+            .collect();
+
+        format!(
+            r#"class {} {{
+  private readonly baseUrl: string;
+  private readonly fetch: typeof fetch;
+
+  constructor(baseUrl: string, fetchFn: typeof fetch = fetch) {{
+    this.baseUrl = baseUrl;
+    this.fetch = fetchFn;
+  }}
+
+{}
+}}"#,
+            class_name,
+            methods.join("\n\n")
+        )
+    }
 }
 
 // ============================================================================
@@ -452,6 +525,26 @@ mod tests {
         assert!(interface.contains("interface UserService"));
         assert!(interface.contains("getUser(request: { id: string }): Promise<User>"));
         assert!(interface.contains("listUsers(request: { page: number }): Promise<User[]>"));
+    }
+
+    #[test]
+    fn test_rpc_service_typescript_client() {
+        let client = TestUserService::typescript_client();
+        // Check class declaration
+        assert!(client.contains("class UserServiceClient"));
+        // Check constructor
+        assert!(client.contains("constructor(baseUrl: string, fetchFn: typeof fetch = fetch)"));
+        assert!(client.contains("this.baseUrl = baseUrl"));
+        assert!(client.contains("this.fetch = fetchFn"));
+        // Check method signatures
+        assert!(client.contains("async getUser(request: { id: string }): Promise<User>"));
+        assert!(client.contains("async listUsers(request: { page: number }): Promise<User[]>"));
+        // Check fetch calls with correct endpoints
+        assert!(client.contains("/UserService/getUser"));
+        assert!(client.contains("/UserService/listUsers"));
+        // Check error handling
+        assert!(client.contains("if (!response.ok)"));
+        assert!(client.contains("throw new Error"));
     }
 
     // Error type tests
