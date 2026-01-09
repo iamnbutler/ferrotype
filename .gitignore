@@ -1,0 +1,37 @@
+# Rust / Cargo
+/target/
+debug/
+*.pdb
+*.so
+*.rlib
+*.dll
+*.dylib
+**/*.rs.bk
+
+# Cargo.lock is included for binaries but can be ignored for libraries
+# Uncomment the line below if this is a library-only project
+# Cargo.lock
+
+# Insta snapshot testing
+*.snap.new
+
+# Node.js / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env*.local
