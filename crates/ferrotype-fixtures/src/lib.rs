@@ -508,26 +508,487 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_serialization_roundtrip() {
-        let point = Point { x: 1.0, y: 2.0 };
-        let json = serde_json::to_string(&point).unwrap();
-        let parsed: Point = serde_json::from_str(&json).unwrap();
-        assert_eq!(point, parsed);
+    // ========================================================================
+    // ROUNDTRIP SERIALIZATION TESTS
+    // ========================================================================
 
-        let user = User {
-            id: 1,
-            name: "Test".to_string(),
-            email: "test@example.com".to_string(),
-            active: true,
-        };
-        let json = serde_json::to_string(&user).unwrap();
-        let parsed: User = serde_json::from_str(&json).unwrap();
-        assert_eq!(user, parsed);
+    mod roundtrip {
+        use super::*;
 
-        let status = Status::Active;
-        let json = serde_json::to_string(&status).unwrap();
-        let parsed: Status = serde_json::from_str(&json).unwrap();
-        assert_eq!(status, parsed);
+        /// Helper to verify roundtrip: Rust -> JSON -> Rust
+        fn assert_roundtrip<T>(value: T)
+        where
+            T: Serialize + for<'de> Deserialize<'de> + PartialEq + std::fmt::Debug,
+        {
+            let json = serde_json::to_string(&value).expect("serialize");
+            let parsed: T = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(value, parsed, "roundtrip failed for JSON: {}", json);
+        }
+
+        /// Helper to verify JSON format matches expected structure
+        fn assert_json_format<T: Serialize>(value: &T, expected: &str) {
+            let json = serde_json::to_string(value).expect("serialize");
+            let actual: serde_json::Value = serde_json::from_str(&json).unwrap();
+            let expected: serde_json::Value = serde_json::from_str(expected).unwrap();
+            assert_eq!(actual, expected, "JSON format mismatch");
+        }
+
+        // --------------------------------------------------------------------
+        // STRUCT ROUNDTRIP TESTS
+        // --------------------------------------------------------------------
+
+        #[test]
+        fn test_point_roundtrip() {
+            assert_roundtrip(Point { x: 0.0, y: 0.0 });
+            assert_roundtrip(Point { x: -1.5, y: 2.5 });
+            assert_roundtrip(Point { x: f64::MAX, y: f64::MIN });
+            assert_json_format(&Point { x: 1.0, y: 2.0 }, r#"{"x":1.0,"y":2.0}"#);
+        }
+
+        #[test]
+        fn test_user_roundtrip() {
+            let user = User {
+                id: 12345,
+                name: "Alice".to_string(),
+                email: "alice@example.com".to_string(),
+                active: true,
+            };
+            assert_roundtrip(user.clone());
+            assert_json_format(
+                &user,
+                r#"{"id":12345,"name":"Alice","email":"alice@example.com","active":true}"#,
+            );
+
+            // Test with special characters
+            assert_roundtrip(User {
+                id: 0,
+                name: "名前".to_string(),
+                email: "test+tag@example.com".to_string(),
+                active: false,
+            });
+        }
+
+        #[test]
+        fn test_profile_roundtrip() {
+            // All fields present
+            assert_roundtrip(Profile {
+                username: "alice".to_string(),
+                display_name: Some("Alice Smith".to_string()),
+                bio: Some("Hello world".to_string()),
+                avatar_url: Some("https://example.com/avatar.png".to_string()),
+            });
+
+            // All optional fields null
+            let minimal = Profile {
+                username: "bob".to_string(),
+                display_name: None,
+                bio: None,
+                avatar_url: None,
+            };
+            assert_roundtrip(minimal.clone());
+            assert_json_format(
+                &minimal,
+                r#"{"username":"bob","display_name":null,"bio":null,"avatar_url":null}"#,
+            );
+
+            // Mixed
+            assert_roundtrip(Profile {
+                username: "charlie".to_string(),
+                display_name: Some("Charlie".to_string()),
+                bio: None,
+                avatar_url: Some("https://example.com/c.png".to_string()),
+            });
+        }
+
+        #[test]
+        fn test_rgb_roundtrip() {
+            assert_roundtrip(Rgb(0, 0, 0));
+            assert_roundtrip(Rgb(255, 255, 255));
+            assert_roundtrip(Rgb(128, 64, 32));
+            assert_json_format(&Rgb(255, 128, 0), "[255,128,0]");
+        }
+
+        #[test]
+        fn test_ping_roundtrip() {
+            assert_roundtrip(Ping);
+            assert_json_format(&Ping, "null");
+        }
+
+        #[test]
+        fn test_user_id_roundtrip() {
+            assert_roundtrip(UserId(0));
+            assert_roundtrip(UserId(u64::MAX));
+            assert_json_format(&UserId(42), "42");
+        }
+
+        #[test]
+        fn test_rectangle_roundtrip() {
+            let rect = Rectangle {
+                top_left: Point { x: 0.0, y: 10.0 },
+                bottom_right: Point { x: 10.0, y: 0.0 },
+            };
+            assert_roundtrip(rect.clone());
+            assert_json_format(
+                &rect,
+                r#"{"top_left":{"x":0.0,"y":10.0},"bottom_right":{"x":10.0,"y":0.0}}"#,
+            );
+        }
+
+        #[test]
+        fn test_polygon_roundtrip() {
+            // Empty
+            assert_roundtrip(Polygon { vertices: vec![] });
+
+            // Single point
+            assert_roundtrip(Polygon {
+                vertices: vec![Point { x: 0.0, y: 0.0 }],
+            });
+
+            // Triangle
+            let triangle = Polygon {
+                vertices: vec![
+                    Point { x: 0.0, y: 0.0 },
+                    Point { x: 1.0, y: 0.0 },
+                    Point { x: 0.5, y: 1.0 },
+                ],
+            };
+            assert_roundtrip(triangle);
+        }
+
+        #[test]
+        fn test_config_roundtrip() {
+            // Empty
+            assert_roundtrip(Config {
+                settings: HashMap::new(),
+            });
+
+            // With values
+            let mut settings = HashMap::new();
+            settings.insert("theme".to_string(), "dark".to_string());
+            settings.insert("language".to_string(), "en".to_string());
+            assert_roundtrip(Config { settings });
+        }
+
+        // --------------------------------------------------------------------
+        // ENUM ROUNDTRIP TESTS
+        // --------------------------------------------------------------------
+
+        #[test]
+        fn test_status_roundtrip() {
+            assert_roundtrip(Status::Pending);
+            assert_roundtrip(Status::Active);
+            assert_roundtrip(Status::Completed);
+            assert_roundtrip(Status::Failed);
+
+            // Verify JSON format (serde default for unit variants)
+            assert_json_format(&Status::Active, r#""Active""#);
+        }
+
+        #[test]
+        fn test_coordinate_roundtrip() {
+            assert_roundtrip(Coordinate::D2(1.0, 2.0));
+            assert_roundtrip(Coordinate::D3(1.0, 2.0, 3.0));
+
+            // Verify JSON format (serde externally tagged by default)
+            assert_json_format(&Coordinate::D2(1.0, 2.0), r#"{"D2":[1.0,2.0]}"#);
+            assert_json_format(&Coordinate::D3(1.0, 2.0, 3.0), r#"{"D3":[1.0,2.0,3.0]}"#);
+        }
+
+        #[test]
+        fn test_shape_roundtrip() {
+            assert_roundtrip(Shape::Circle {
+                center: Point { x: 0.0, y: 0.0 },
+                radius: 5.0,
+            });
+
+            assert_roundtrip(Shape::Rectangle {
+                top_left: Point { x: 0.0, y: 10.0 },
+                width: 10.0,
+                height: 10.0,
+            });
+
+            assert_roundtrip(Shape::Triangle {
+                a: Point { x: 0.0, y: 0.0 },
+                b: Point { x: 1.0, y: 0.0 },
+                c: Point { x: 0.5, y: 1.0 },
+            });
+        }
+
+        #[test]
+        fn test_message_roundtrip() {
+            assert_roundtrip(Message::Ping);
+            assert_roundtrip(Message::Text("Hello, world!".to_string()));
+            assert_roundtrip(Message::Binary(vec![0, 1, 2, 255]));
+            assert_roundtrip(Message::Error {
+                code: 500,
+                message: "Internal error".to_string(),
+            });
+
+            // Empty cases
+            assert_roundtrip(Message::Text(String::new()));
+            assert_roundtrip(Message::Binary(vec![]));
+        }
+
+        #[test]
+        fn test_optional_value_roundtrip() {
+            assert_roundtrip(OptionalValue::<String>::None);
+            assert_roundtrip(OptionalValue::Some("value".to_string()));
+            assert_roundtrip(OptionalValue::Some(42i32));
+            assert_roundtrip(OptionalValue::Some(Point { x: 1.0, y: 2.0 }));
+        }
+
+        // --------------------------------------------------------------------
+        // RPC TYPE ROUNDTRIP TESTS
+        // --------------------------------------------------------------------
+
+        #[test]
+        fn test_get_user_request_roundtrip() {
+            assert_roundtrip(GetUserRequest { user_id: 123 });
+            assert_roundtrip(GetUserRequest { user_id: 0 });
+            assert_roundtrip(GetUserRequest { user_id: u64::MAX });
+        }
+
+        #[test]
+        fn test_get_user_response_roundtrip() {
+            // User present
+            assert_roundtrip(GetUserResponse {
+                user: Some(User {
+                    id: 1,
+                    name: "Test".to_string(),
+                    email: "test@example.com".to_string(),
+                    active: true,
+                }),
+            });
+
+            // User absent
+            assert_roundtrip(GetUserResponse { user: None });
+        }
+
+        #[test]
+        fn test_list_users_request_roundtrip() {
+            assert_roundtrip(ListUsersRequest {
+                page: 1,
+                per_page: 20,
+                filter: None,
+            });
+
+            assert_roundtrip(ListUsersRequest {
+                page: 5,
+                per_page: 100,
+                filter: Some("active".to_string()),
+            });
+        }
+
+        #[test]
+        fn test_list_users_response_roundtrip() {
+            // Empty
+            assert_roundtrip(ListUsersResponse {
+                users: vec![],
+                total: 0,
+                page: 1,
+                per_page: 20,
+            });
+
+            // With users
+            assert_roundtrip(ListUsersResponse {
+                users: vec![
+                    User {
+                        id: 1,
+                        name: "Alice".to_string(),
+                        email: "alice@example.com".to_string(),
+                        active: true,
+                    },
+                    User {
+                        id: 2,
+                        name: "Bob".to_string(),
+                        email: "bob@example.com".to_string(),
+                        active: false,
+                    },
+                ],
+                total: 100,
+                page: 1,
+                per_page: 2,
+            });
+        }
+
+        // --------------------------------------------------------------------
+        // ERROR TYPE ROUNDTRIP TESTS
+        // --------------------------------------------------------------------
+
+        #[test]
+        fn test_api_error_roundtrip() {
+            assert_roundtrip(ApiError {
+                code: "NOT_FOUND".to_string(),
+                message: "Resource not found".to_string(),
+            });
+        }
+
+        #[test]
+        fn test_detailed_error_roundtrip() {
+            assert_roundtrip(DetailedError {
+                code: "VALIDATION_ERROR".to_string(),
+                message: "Invalid input".to_string(),
+                details: Some("Field 'email' is invalid".to_string()),
+                field: Some("email".to_string()),
+            });
+
+            assert_roundtrip(DetailedError {
+                code: "UNKNOWN".to_string(),
+                message: "Unknown error".to_string(),
+                details: None,
+                field: None,
+            });
+        }
+
+        #[test]
+        fn test_rpc_error_roundtrip() {
+            assert_roundtrip(RpcError::NotFound {
+                resource: "user/123".to_string(),
+            });
+            assert_roundtrip(RpcError::Unauthorized);
+            assert_roundtrip(RpcError::Forbidden {
+                reason: "Insufficient permissions".to_string(),
+            });
+            assert_roundtrip(RpcError::BadRequest {
+                field: "email".to_string(),
+                message: "Invalid format".to_string(),
+            });
+            assert_roundtrip(RpcError::Internal);
+        }
+
+        // --------------------------------------------------------------------
+        // COMPLEX TYPE ROUNDTRIP TESTS
+        // --------------------------------------------------------------------
+
+        #[test]
+        fn test_workspace_roundtrip() {
+            let mut settings = HashMap::new();
+            settings.insert("visibility".to_string(), "private".to_string());
+
+            assert_roundtrip(Workspace {
+                id: 1,
+                name: "My Workspace".to_string(),
+                owner: User {
+                    id: 1,
+                    name: "Owner".to_string(),
+                    email: "owner@example.com".to_string(),
+                    active: true,
+                },
+                members: vec![
+                    User {
+                        id: 2,
+                        name: "Member".to_string(),
+                        email: "member@example.com".to_string(),
+                        active: true,
+                    },
+                ],
+                settings: Config { settings },
+                status: Status::Active,
+            });
+        }
+
+        #[test]
+        fn test_complete_example_roundtrip() {
+            let mut map = HashMap::new();
+            map.insert("key1".to_string(), 100);
+            map.insert("key2".to_string(), 200);
+
+            assert_roundtrip(CompleteExample {
+                primitive: 42,
+                string: "test".to_string(),
+                optional: Some("present".to_string()),
+                list: vec![1, 2, 3],
+                map,
+                nested: User {
+                    id: 1,
+                    name: "Test".to_string(),
+                    email: "test@example.com".to_string(),
+                    active: true,
+                },
+                nested_list: vec![User {
+                    id: 2,
+                    name: "Another".to_string(),
+                    email: "another@example.com".to_string(),
+                    active: false,
+                }],
+                optional_nested: None,
+                status: Status::Pending,
+            });
+        }
+
+        // --------------------------------------------------------------------
+        // EDGE CASE TESTS
+        // --------------------------------------------------------------------
+
+        #[test]
+        fn test_special_characters() {
+            // Unicode
+            assert_roundtrip(User {
+                id: 1,
+                name: "日本語 🎉".to_string(),
+                email: "test@例え.jp".to_string(),
+                active: true,
+            });
+
+            // Escape sequences
+            assert_roundtrip(User {
+                id: 1,
+                name: "Tab\tNewline\nQuote\"".to_string(),
+                email: "test@example.com".to_string(),
+                active: true,
+            });
+        }
+
+        #[test]
+        fn test_numeric_edge_cases() {
+            // Zero
+            assert_roundtrip(Point { x: 0.0, y: -0.0 });
+
+            // Very small/large
+            assert_roundtrip(Point {
+                x: f64::MIN_POSITIVE,
+                y: f64::MAX,
+            });
+
+            // Integer limits
+            assert_roundtrip(User {
+                id: u64::MAX,
+                name: "Max".to_string(),
+                email: "max@example.com".to_string(),
+                active: true,
+            });
+        }
+
+        #[test]
+        fn test_empty_collections() {
+            assert_roundtrip(Polygon { vertices: vec![] });
+            assert_roundtrip(Config {
+                settings: HashMap::new(),
+            });
+            assert_roundtrip(ListUsersResponse {
+                users: vec![],
+                total: 0,
+                page: 1,
+                per_page: 20,
+            });
+        }
+
+        #[test]
+        fn test_large_collections() {
+            // Large vec
+            let vertices: Vec<Point> = (0..1000)
+                .map(|i| Point {
+                    x: i as f64,
+                    y: (i * 2) as f64,
+                })
+                .collect();
+            assert_roundtrip(Polygon { vertices });
+
+            // Large hashmap
+            let settings: HashMap<String, String> = (0..100)
+                .map(|i| (format!("key{}", i), format!("value{}", i)))
+                .collect();
+            assert_roundtrip(Config { settings });
+        }
     }
 }
