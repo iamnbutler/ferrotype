@@ -1,0 +1,20 @@
+[package]
+name = "ferrotype-test-server"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Test server for ferrotype E2E integration testing"
+
+[dependencies]
+ferrotype = { path = "../ferrotype" }
+ferrotype-fixtures = { path = "../ferrotype-fixtures" }
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tower-http = { version = "0.5", features = ["cors"] }
+tower = "0.5"
+
+[[bin]]
+name = "ferrotype-test-server"
+path = "src/main.rs"
