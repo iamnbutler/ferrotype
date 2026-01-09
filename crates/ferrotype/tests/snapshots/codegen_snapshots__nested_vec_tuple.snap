@@ -1,0 +1,6 @@
+---
+source: crates/ferrotype/tests/codegen_snapshots.rs
+assertion_line: 166
+expression: "<Vec<(String, i32)>>::typescript_type()"
+---
+[string, number][]

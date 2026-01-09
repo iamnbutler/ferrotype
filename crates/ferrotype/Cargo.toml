@@ -6,3 +6,6 @@ license.workspace = true
 description = "Rust-to-TypeScript type mapping for Zed RPC"
 
 [dependencies]
+
+[dev-dependencies]
+insta = "1.41"

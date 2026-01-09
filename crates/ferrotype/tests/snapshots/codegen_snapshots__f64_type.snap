@@ -1,0 +1,6 @@
+---
+source: crates/ferrotype/tests/codegen_snapshots.rs
+assertion_line: 59
+expression: "f64::typescript_type()"
+---
+number

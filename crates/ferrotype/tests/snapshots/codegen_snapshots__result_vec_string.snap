@@ -1,0 +1,6 @@
+---
+source: crates/ferrotype/tests/codegen_snapshots.rs
+assertion_line: 128
+expression: "<Result<Vec<String>, String>>::typescript_type()"
+---
+{ ok: true; value: string[] } | { ok: false; error: string }

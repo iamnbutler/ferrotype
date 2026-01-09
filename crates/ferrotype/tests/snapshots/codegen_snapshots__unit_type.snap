@@ -1,0 +1,6 @@
+---
+source: crates/ferrotype/tests/codegen_snapshots.rs
+assertion_line: 12
+expression: "<()>::typescript_type()"
+---
+void
