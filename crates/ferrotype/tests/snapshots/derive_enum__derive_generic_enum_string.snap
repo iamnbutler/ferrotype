@@ -1,0 +1,6 @@
+---
+source: crates/ferrotype/tests/derive_enum.rs
+assertion_line: 196
+expression: "<OptionalValue<String>>::typescript_type()"
+---
+{ type: "None" } | { type: "Some"; value: string }

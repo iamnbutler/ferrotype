@@ -6,6 +6,7 @@ license.workspace = true
 description = "Rust-to-TypeScript type mapping for Zed RPC"
 
 [dependencies]
+ferrotype-derive = { path = "../ferrotype-derive" }
 
 [dev-dependencies]
 insta = "1.41"

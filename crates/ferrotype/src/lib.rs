@@ -3,6 +3,8 @@
 //! This crate provides traits for generating TypeScript type definitions
 //! from Rust types, enabling type-safe RPC communication.
 
+pub use ferrotype_derive::TypeScript;
+
 use std::collections::HashMap;
 
 /// Trait for types that can be represented as TypeScript types.

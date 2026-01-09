@@ -1,0 +1,6 @@
+---
+source: crates/ferrotype/tests/derive_enum.rs
+assertion_line: 195
+expression: "Message::typescript_type()"
+---
+{ type: "Ping" } | { type: "Text"; value: string } | { type: "Binary"; value: number[] } | { type: "Error"; code: number; message: string }
