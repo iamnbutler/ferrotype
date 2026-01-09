@@ -65,11 +65,9 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let typescript_type = generate_enum_typescript(&data.variants)?;
             generate_impl(name, &name_str, generics, typescript_type)
         }
-        Data::Struct(_) => {
-            Err(syn::Error::new_spanned(
-                input,
-                "TypeScript derive for structs is not yet implemented. Use ft-a4r task.",
-            ))
+        Data::Struct(data) => {
+            let typescript_type = generate_struct_typescript(&data.fields)?;
+            generate_impl(name, &name_str, generics, typescript_type)
         }
         Data::Union(_) => {
             Err(syn::Error::new_spanned(
@@ -168,6 +166,65 @@ fn generate_enum_typescript(
                 variants.join(" | ")
             }
         })
+    }
+}
+
+fn generate_struct_typescript(fields: &syn::Fields) -> syn::Result<TokenStream2> {
+    match fields {
+        syn::Fields::Named(fields) => {
+            // Named struct: { field1: type1; field2: type2 }
+            if fields.named.is_empty() {
+                // Empty struct becomes empty object
+                return Ok(quote! { "{}".to_string() });
+            }
+
+            let field_parts: Vec<TokenStream2> = fields
+                .named
+                .iter()
+                .map(|f| {
+                    let field_name = f.ident.as_ref().unwrap().to_string();
+                    let field_type = &f.ty;
+                    let type_expr = type_to_typescript(field_type);
+                    quote! {
+                        format!("{}: {}", #field_name, #type_expr)
+                    }
+                })
+                .collect();
+
+            Ok(quote! {
+                {
+                    let fields = vec![#(#field_parts),*];
+                    format!("{{ {} }}", fields.join("; "))
+                }
+            })
+        }
+        syn::Fields::Unnamed(fields) => {
+            // Tuple struct: [type1, type2, ...]
+            if fields.unnamed.len() == 1 {
+                // Newtype: unwrap to inner type
+                let field_type = &fields.unnamed.first().unwrap().ty;
+                let type_expr = type_to_typescript(field_type);
+                Ok(quote! { #type_expr })
+            } else {
+                // Tuple: [type1, type2]
+                let field_types: Vec<TokenStream2> = fields
+                    .unnamed
+                    .iter()
+                    .map(|f| type_to_typescript(&f.ty))
+                    .collect();
+
+                Ok(quote! {
+                    {
+                        let types = vec![#(#field_types),*];
+                        format!("[{}]", types.join(", "))
+                    }
+                })
+            }
+        }
+        syn::Fields::Unit => {
+            // Unit struct becomes null/void
+            Ok(quote! { "null".to_string() })
+        }
     }
 }
 
