@@ -37,6 +37,92 @@ pub trait RpcParam: TypeScriptType {}
 pub trait RpcReturn: TypeScriptType {}
 
 // ============================================================================
+// RPC SERVICE TRAIT
+// ============================================================================
+
+/// Information about an RPC method including request/response types.
+///
+/// This struct captures the metadata needed to generate TypeScript interfaces
+/// for RPC methods, including the method name and its parameter/return types.
+#[derive(Debug, Clone)]
+pub struct RpcMethodInfo {
+    /// The method name as it appears in the RPC interface.
+    pub name: &'static str,
+    /// TypeScript type representation of the request parameters.
+    pub request_type: String,
+    /// TypeScript type representation of the response.
+    pub response_type: String,
+}
+
+impl RpcMethodInfo {
+    /// Creates a new RpcMethodInfo with the given name and types.
+    pub fn new(name: &'static str, request_type: String, response_type: String) -> Self {
+        Self {
+            name,
+            request_type,
+            response_type,
+        }
+    }
+}
+
+/// Trait for RPC services that can have methods registered.
+///
+/// This trait provides the foundation for defining RPC services that can
+/// generate TypeScript interfaces. Implementations define the service name
+/// and its available methods, enabling automatic TypeScript client generation.
+///
+/// # Examples
+///
+/// ```ignore
+/// struct UserService;
+///
+/// impl RpcService for UserService {
+///     fn service_name() -> &'static str {
+///         "UserService"
+///     }
+///
+///     fn methods() -> Vec<RpcMethodInfo> {
+///         vec![
+///             RpcMethodInfo {
+///                 name: "getUser",
+///                 request_type: "{ id: string }".to_string(),
+///                 response_type: "User".to_string(),
+///             },
+///         ]
+///     }
+/// }
+/// ```
+pub trait RpcService {
+    /// Returns the service name used in TypeScript interface generation.
+    fn service_name() -> &'static str;
+
+    /// Returns all registered RPC methods with their type signatures.
+    fn methods() -> Vec<RpcMethodInfo>;
+
+    /// Generates the TypeScript interface definition for this service.
+    ///
+    /// The generated interface includes all methods with their request/response
+    /// types wrapped in Promise for async operation.
+    fn typescript_interface() -> String {
+        let methods: Vec<String> = Self::methods()
+            .iter()
+            .map(|m| {
+                format!(
+                    "  {}(request: {}): Promise<{}>",
+                    m.name, m.request_type, m.response_type
+                )
+            })
+            .collect();
+
+        format!(
+            "interface {} {{\n{}\n}}",
+            Self::service_name(),
+            methods.join(";\n")
+        )
+    }
+}
+
+// ============================================================================
 // PRIMITIVE IMPLEMENTATIONS
 // ============================================================================
 
@@ -244,5 +330,63 @@ mod tests {
         assert_eq!(<(String,)>::typescript_type(), "[string]");
         assert_eq!(<(String, i32)>::typescript_type(), "[string, number]");
         assert_eq!(<(String, i32, bool)>::typescript_type(), "[string, number, boolean]");
+    }
+
+    // RPC Service tests
+
+    struct TestUserService;
+
+    impl RpcService for TestUserService {
+        fn service_name() -> &'static str {
+            "UserService"
+        }
+
+        fn methods() -> Vec<RpcMethodInfo> {
+            vec![
+                RpcMethodInfo::new(
+                    "getUser",
+                    "{ id: string }".to_string(),
+                    "User".to_string(),
+                ),
+                RpcMethodInfo::new(
+                    "listUsers",
+                    "{ page: number }".to_string(),
+                    "User[]".to_string(),
+                ),
+            ]
+        }
+    }
+
+    #[test]
+    fn test_rpc_method_info() {
+        let method = RpcMethodInfo::new(
+            "testMethod",
+            "string".to_string(),
+            "number".to_string(),
+        );
+        assert_eq!(method.name, "testMethod");
+        assert_eq!(method.request_type, "string");
+        assert_eq!(method.response_type, "number");
+    }
+
+    #[test]
+    fn test_rpc_service_name() {
+        assert_eq!(TestUserService::service_name(), "UserService");
+    }
+
+    #[test]
+    fn test_rpc_service_methods() {
+        let methods = TestUserService::methods();
+        assert_eq!(methods.len(), 2);
+        assert_eq!(methods[0].name, "getUser");
+        assert_eq!(methods[1].name, "listUsers");
+    }
+
+    #[test]
+    fn test_rpc_service_typescript_interface() {
+        let interface = TestUserService::typescript_interface();
+        assert!(interface.contains("interface UserService"));
+        assert!(interface.contains("getUser(request: { id: string }): Promise<User>"));
+        assert!(interface.contains("listUsers(request: { page: number }): Promise<User[]>"));
     }
 }
