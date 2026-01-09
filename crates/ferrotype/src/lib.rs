@@ -257,6 +257,115 @@ pub trait RpcService {
             methods.join("\n\n")
         )
     }
+
+    /// Generates a TypeScript request builder for type-safe request construction.
+    ///
+    /// The generated code includes:
+    /// - Generic `RequestBuilder<TRequest, TResponse>` class
+    /// - Fluent API with type inference for setting fields
+    /// - Execute method that sends the built request
+    ///
+    /// # Example Output
+    ///
+    /// ```typescript
+    /// class RequestBuilder<TRequest, TResponse> {
+    ///   private data: Partial<TRequest> = {};
+    ///
+    ///   constructor(
+    ///     private readonly client: UserServiceClient,
+    ///     private readonly methodName: string,
+    ///   ) {}
+    ///
+    ///   set<K extends keyof TRequest>(key: K, value: TRequest[K]): this {
+    ///     this.data[key] = value;
+    ///     return this;
+    ///   }
+    ///
+    ///   build(): TRequest {
+    ///     return this.data as TRequest;
+    ///   }
+    ///
+    ///   async execute(): Promise<TResponse> {
+    ///     return (this.client as any)[this.methodName](this.build());
+    ///   }
+    /// }
+    /// ```
+    fn typescript_request_builder() -> String {
+        let service_name = Self::service_name();
+        let client_class = format!("{}Client", service_name);
+        let builder_class = format!("{}RequestBuilder", service_name);
+
+        // Generate builder factory methods for each RPC method
+        let factory_methods: Vec<String> = Self::methods()
+            .iter()
+            .map(|m| {
+                format!(
+                    r#"  {}(): RequestBuilder<{}, {}> {{
+    return new RequestBuilder<{}, {}>(this.client, '{}');
+  }}"#,
+                    m.name, m.request_type, m.response_type,
+                    m.request_type, m.response_type, m.name
+                )
+            })
+            .collect();
+
+        format!(
+            r#"/**
+ * Generic request builder with type-safe field setting and execution.
+ */
+class RequestBuilder<TRequest, TResponse> {{
+  private data: Partial<TRequest> = {{}};
+
+  constructor(
+    private readonly client: {client},
+    private readonly methodName: string,
+  ) {{}}
+
+  /**
+   * Set a field on the request with full type inference.
+   */
+  set<K extends keyof TRequest>(key: K, value: TRequest[K]): this {{
+    this.data[key] = value;
+    return this;
+  }}
+
+  /**
+   * Set multiple fields at once.
+   */
+  setAll(fields: Partial<TRequest>): this {{
+    Object.assign(this.data, fields);
+    return this;
+  }}
+
+  /**
+   * Build the final request object.
+   */
+  build(): TRequest {{
+    return this.data as TRequest;
+  }}
+
+  /**
+   * Execute the request and return the response.
+   */
+  async execute(): Promise<TResponse> {{
+    return (this.client as any)[this.methodName](this.build());
+  }}
+}}
+
+/**
+ * Factory for creating type-safe request builders for {service}.
+ */
+class {builder} {{
+  constructor(private readonly client: {client}) {{}}
+
+{methods}
+}}"#,
+            client = client_class,
+            service = service_name,
+            builder = builder_class,
+            methods = factory_methods.join("\n\n")
+        )
+    }
 }
 
 // ============================================================================
@@ -545,6 +654,28 @@ mod tests {
         // Check error handling
         assert!(client.contains("if (!response.ok)"));
         assert!(client.contains("throw new Error"));
+    }
+
+    #[test]
+    fn test_rpc_service_request_builder() {
+        let builder = TestUserService::typescript_request_builder();
+        // Check generic RequestBuilder class
+        assert!(builder.contains("class RequestBuilder<TRequest, TResponse>"));
+        assert!(builder.contains("private data: Partial<TRequest>"));
+        // Check set method with type inference
+        assert!(builder.contains("set<K extends keyof TRequest>(key: K, value: TRequest[K]): this"));
+        // Check setAll method
+        assert!(builder.contains("setAll(fields: Partial<TRequest>): this"));
+        // Check build method
+        assert!(builder.contains("build(): TRequest"));
+        // Check execute method
+        assert!(builder.contains("async execute(): Promise<TResponse>"));
+        // Check factory class
+        assert!(builder.contains("class UserServiceRequestBuilder"));
+        assert!(builder.contains("constructor(private readonly client: UserServiceClient)"));
+        // Check factory methods
+        assert!(builder.contains("getUser(): RequestBuilder<{ id: string }, User>"));
+        assert!(builder.contains("listUsers(): RequestBuilder<{ page: number }, User[]>"));
     }
 
     // Error type tests
