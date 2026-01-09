@@ -3,7 +3,7 @@
 //! This crate provides traits for generating TypeScript type definitions
 //! from Rust types, enabling type-safe RPC communication.
 
-pub use ferrotype_derive::TypeScript;
+pub use ferrotype_derive::{rpc_method, TypeScript};
 
 use std::collections::HashMap;
 
