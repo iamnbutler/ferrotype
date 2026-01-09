@@ -36,6 +36,70 @@ pub trait RpcParam: TypeScriptType {}
 /// Types implementing this trait can be deserialized from an RPC response.
 pub trait RpcReturn: TypeScriptType {}
 
+/// Marker trait for types that represent RPC errors.
+///
+/// Types implementing this trait can be used as error types in RPC methods.
+/// Error types should typically be enums with discriminated variants or
+/// structs with error code/message fields.
+pub trait RpcErrorType: TypeScriptType {
+    /// Generates TypeScript type guards for this error type.
+    ///
+    /// For enum error types, this generates guards like `isNotFoundError(err)`.
+    /// Returns an empty string if type guards are not applicable.
+    fn typescript_type_guards() -> String {
+        String::new()
+    }
+}
+
+/// Information about an error variant for TypeScript codegen.
+#[derive(Debug, Clone)]
+pub struct ErrorVariantInfo {
+    /// The variant/error code name
+    pub name: &'static str,
+    /// TypeScript type for this error variant
+    pub typescript_type: String,
+}
+
+impl ErrorVariantInfo {
+    /// Creates a new ErrorVariantInfo.
+    pub fn new(name: &'static str, typescript_type: String) -> Self {
+        Self {
+            name,
+            typescript_type,
+        }
+    }
+
+    /// Generates a TypeScript type guard function for this error variant.
+    pub fn typescript_type_guard(&self, error_type_name: &str) -> String {
+        let guard_name = format!("is{}Error", self.name);
+        format!(
+            r#"function {}(error: {}): error is {{ type: "{}" }} {{
+  return (error as any).type === "{}";
+}}"#,
+            guard_name, error_type_name, self.name, self.name
+        )
+    }
+}
+
+/// Trait for enum error types that can enumerate their variants.
+///
+/// This trait enables automatic generation of TypeScript type guards
+/// for each error variant.
+pub trait EnumerableError: RpcErrorType {
+    /// Returns information about all error variants.
+    fn error_variants() -> Vec<ErrorVariantInfo>;
+
+    /// Generates TypeScript type guards for all error variants.
+    fn generate_all_type_guards() -> String {
+        let type_name = Self::typescript_name();
+        Self::error_variants()
+            .iter()
+            .map(|v| v.typescript_type_guard(type_name))
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+}
+
 // ============================================================================
 // RPC SERVICE TRAIT
 // ============================================================================
@@ -388,5 +452,84 @@ mod tests {
         assert!(interface.contains("interface UserService"));
         assert!(interface.contains("getUser(request: { id: string }): Promise<User>"));
         assert!(interface.contains("listUsers(request: { page: number }): Promise<User[]>"));
+    }
+
+    // Error type tests
+
+    struct ApiError;
+
+    impl TypeScriptType for ApiError {
+        fn typescript_type() -> String {
+            "{ code: string; message: string }".to_string()
+        }
+
+        fn typescript_name() -> &'static str {
+            "ApiError"
+        }
+    }
+
+    impl RpcErrorType for ApiError {}
+
+    struct TestRpcError;
+
+    impl TypeScriptType for TestRpcError {
+        fn typescript_type() -> String {
+            r#"{ type: "NotFound"; resource: string } | { type: "Unauthorized" } | { type: "BadRequest"; field: string; message: string }"#.to_string()
+        }
+
+        fn typescript_name() -> &'static str {
+            "RpcError"
+        }
+    }
+
+    impl RpcErrorType for TestRpcError {}
+
+    impl EnumerableError for TestRpcError {
+        fn error_variants() -> Vec<ErrorVariantInfo> {
+            vec![
+                ErrorVariantInfo::new(
+                    "NotFound",
+                    r#"{ type: "NotFound"; resource: string }"#.to_string(),
+                ),
+                ErrorVariantInfo::new(
+                    "Unauthorized",
+                    r#"{ type: "Unauthorized" }"#.to_string(),
+                ),
+                ErrorVariantInfo::new(
+                    "BadRequest",
+                    r#"{ type: "BadRequest"; field: string; message: string }"#.to_string(),
+                ),
+            ]
+        }
+    }
+
+    #[test]
+    fn test_error_variant_info() {
+        let variant = ErrorVariantInfo::new("NotFound", "{ type: \"NotFound\" }".to_string());
+        assert_eq!(variant.name, "NotFound");
+    }
+
+    #[test]
+    fn test_error_type_guard_generation() {
+        let variant = ErrorVariantInfo::new("NotFound", "{ type: \"NotFound\" }".to_string());
+        let guard = variant.typescript_type_guard("RpcError");
+        assert!(guard.contains("function isNotFoundError"));
+        assert!(guard.contains("error: RpcError"));
+        assert!(guard.contains("error is { type: \"NotFound\" }"));
+        assert!(guard.contains("return (error as any).type === \"NotFound\""));
+    }
+
+    #[test]
+    fn test_enumerable_error_all_guards() {
+        let guards = TestRpcError::generate_all_type_guards();
+        assert!(guards.contains("isNotFoundError"));
+        assert!(guards.contains("isUnauthorizedError"));
+        assert!(guards.contains("isBadRequestError"));
+    }
+
+    #[test]
+    fn test_rpc_error_type_default_guards() {
+        // Default implementation returns empty string
+        assert_eq!(ApiError::typescript_type_guards(), "");
     }
 }
