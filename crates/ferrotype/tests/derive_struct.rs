@@ -219,3 +219,127 @@ fn test_list_response() {
     assert!(rendered.contains("total_count: number"));
     assert!(rendered.contains("has_more: boolean"));
 }
+
+// ============================================================================
+// RENAME ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+#[ts(rename = "RenamedUser")]
+struct UserWithRenamedType {
+    id: String,
+    name: String,
+}
+
+#[test]
+fn test_type_rename() {
+    let td = UserWithRenamedType::typescript();
+    // The TypeDef should use the renamed type name
+    assert_eq!(td.render(), "RenamedUser");
+    assert_eq!(td.render_declaration(), "type RenamedUser = { id: string; name: string };");
+}
+
+#[derive(TypeScript)]
+struct FieldRenameStruct {
+    #[ts(rename = "userId")]
+    user_id: String,
+    #[ts(rename = "userName")]
+    user_name: String,
+    not_renamed: i32,
+}
+
+#[test]
+fn test_field_rename() {
+    let td = FieldRenameStruct::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("userId: string"));
+    assert!(rendered.contains("userName: string"));
+    assert!(rendered.contains("not_renamed: number"));
+    // Should NOT contain the original snake_case names for renamed fields
+    assert!(!rendered.contains("user_id:"));
+    assert!(!rendered.contains("user_name:"));
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "camelCase")]
+struct CamelCaseStruct {
+    user_id: String,
+    user_name: String,
+    is_active: bool,
+}
+
+#[test]
+fn test_rename_all_camel_case() {
+    let td = CamelCaseStruct::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("userId: string"));
+    assert!(rendered.contains("userName: string"));
+    assert!(rendered.contains("isActive: boolean"));
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "PascalCase")]
+struct PascalCaseStruct {
+    user_id: String,
+    is_active: bool,
+}
+
+#[test]
+fn test_rename_all_pascal_case() {
+    let td = PascalCaseStruct::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("UserId: string"));
+    assert!(rendered.contains("IsActive: boolean"));
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "SCREAMING_SNAKE_CASE")]
+struct ScreamingSnakeStruct {
+    user_id: String,
+    is_active: bool,
+}
+
+#[test]
+fn test_rename_all_screaming_snake() {
+    let td = ScreamingSnakeStruct::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("USER_ID: string"));
+    assert!(rendered.contains("IS_ACTIVE: boolean"));
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "kebab-case")]
+struct KebabCaseStruct {
+    user_id: String,
+    is_active: bool,
+}
+
+#[test]
+fn test_rename_all_kebab_case() {
+    let td = KebabCaseStruct::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("user-id: string"));
+    assert!(rendered.contains("is-active: boolean"));
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "camelCase")]
+struct MixedRenameStruct {
+    user_id: String,
+    #[ts(rename = "EXPLICIT_NAME")]
+    some_field: String,
+    another_field: i32,
+}
+
+#[test]
+fn test_field_rename_overrides_rename_all() {
+    let td = MixedRenameStruct::typescript();
+    let rendered = inner_def(td).render();
+    // rename_all applies to user_id and another_field
+    assert!(rendered.contains("userId: string"));
+    assert!(rendered.contains("anotherField: number"));
+    // Explicit rename overrides rename_all
+    assert!(rendered.contains("EXPLICIT_NAME: string"));
+    // Should NOT contain the camelCase version of some_field
+    assert!(!rendered.contains("someField:"));
+}

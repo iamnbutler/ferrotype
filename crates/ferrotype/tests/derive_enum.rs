@@ -212,3 +212,115 @@ fn test_derive_enum_snapshots() {
     insta::assert_snapshot!("derive_generic_enum_string", inner_def(<OptionalValue<String>>::typescript()).render());
     insta::assert_snapshot!("derive_generic_enum_i32", inner_def(<OptionalValue<i32>>::typescript()).render());
 }
+
+// ============================================================================
+// RENAME ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+#[ts(rename = "RenamedStatus")]
+enum StatusWithRenamedType {
+    Active,
+    Inactive,
+}
+
+#[test]
+fn test_enum_type_rename() {
+    let td = StatusWithRenamedType::typescript();
+    assert_eq!(td.render(), "RenamedStatus");
+}
+
+#[derive(TypeScript)]
+enum VariantRenameEnum {
+    #[ts(rename = "active")]
+    Active,
+    #[ts(rename = "inactive")]
+    Inactive,
+}
+
+#[test]
+fn test_enum_variant_rename() {
+    let td = VariantRenameEnum::typescript();
+    let rendered = inner_def(td).render();
+    assert_eq!(rendered, r#""active" | "inactive""#);
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "camelCase")]
+enum CamelCaseEnum {
+    FirstVariant,
+    SecondVariant,
+    ThirdOption,
+}
+
+#[test]
+fn test_enum_rename_all_camel_case() {
+    let td = CamelCaseEnum::typescript();
+    let rendered = inner_def(td).render();
+    assert_eq!(rendered, r#""firstVariant" | "secondVariant" | "thirdOption""#);
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "snake_case")]
+enum SnakeCaseEnum {
+    FirstVariant,
+    SecondVariant,
+}
+
+#[test]
+fn test_enum_rename_all_snake_case() {
+    let td = SnakeCaseEnum::typescript();
+    let rendered = inner_def(td).render();
+    assert_eq!(rendered, r#""first_variant" | "second_variant""#);
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "SCREAMING_SNAKE_CASE")]
+enum ScreamingEnum {
+    FirstVariant,
+    SecondVariant,
+}
+
+#[test]
+fn test_enum_rename_all_screaming() {
+    let td = ScreamingEnum::typescript();
+    let rendered = inner_def(td).render();
+    assert_eq!(rendered, r#""FIRST_VARIANT" | "SECOND_VARIANT""#);
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "camelCase")]
+enum MixedRenameEnum {
+    FirstVariant,
+    #[ts(rename = "EXPLICIT")]
+    SecondVariant,
+    ThirdVariant,
+}
+
+#[test]
+fn test_enum_variant_rename_overrides_rename_all() {
+    let td = MixedRenameEnum::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains(r#""firstVariant""#));
+    assert!(rendered.contains(r#""EXPLICIT""#));
+    assert!(rendered.contains(r#""thirdVariant""#));
+    // Should NOT contain the camelCase version of SecondVariant
+    assert!(!rendered.contains(r#""secondVariant""#));
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "camelCase")]
+enum DataVariantRenameEnum {
+    #[ts(rename = "textMessage")]
+    Text(String),
+    #[ts(rename = "errorInfo")]
+    Error { code: i32, message: String },
+}
+
+#[test]
+fn test_data_variant_rename() {
+    let td = DataVariantRenameEnum::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains(r#"type: "textMessage""#));
+    assert!(rendered.contains(r#"type: "errorInfo""#));
+}
