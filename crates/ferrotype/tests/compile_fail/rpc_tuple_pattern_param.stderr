@@ -1,0 +1,5 @@
+error: RPC methods must have a self parameter
+ --> tests/compile_fail/rpc_tuple_pattern_param.rs:9:15
+  |
+9 |     fn method((a, b): (i32, i32), request: String) -> String {
+  |               ^^^^^^^^^^^^^^^^^^

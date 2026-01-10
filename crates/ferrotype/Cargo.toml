@@ -10,3 +10,4 @@ ferrotype-derive = { path = "../ferrotype-derive" }
 
 [dev-dependencies]
 insta = "1.41"
+trybuild = "1.0"

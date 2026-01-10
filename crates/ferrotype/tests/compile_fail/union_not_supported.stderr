@@ -1,0 +1,8 @@
+error: TypeScript derive is not supported for unions
+ --> tests/compile_fail/union_not_supported.rs:6:1
+  |
+6 | / union MyUnion {
+7 | |     i: i32,
+8 | |     f: f32,
+9 | | }
+  | |_^

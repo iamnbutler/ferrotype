@@ -1,0 +1,5 @@
+error: unknown attribute, expected `name`
+ --> tests/compile_fail/rpc_unknown_attr.rs:8:18
+  |
+8 |     #[rpc_method(unknown = "value")]
+  |                  ^^^^^^^

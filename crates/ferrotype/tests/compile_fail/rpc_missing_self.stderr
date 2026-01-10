@@ -1,0 +1,5 @@
+error: RPC methods must have a self parameter
+ --> tests/compile_fail/rpc_missing_self.rs:9:15
+  |
+9 |     fn method(other: i32, request: String) -> String {
+  |               ^^^^^^^^^^
