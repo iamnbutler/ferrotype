@@ -4,8 +4,8 @@
 //! These fixtures cover the full range of type patterns that
 //! ferrotype must handle correctly.
 
-use ferrotype::{RpcParam, RpcReturn, TypeScriptType};
-use ferrotype_derive::TypeScript;
+use ferrotype::{Field, Primitive, RpcParam, RpcReturn, TypeDef, TypeScript, TypeScriptType};
+use ferrotype_derive::TypeScript as DeriveTypeScript;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -26,6 +26,18 @@ impl TypeScriptType for Point {
     }
     fn typescript_name() -> &'static str {
         "Point"
+    }
+}
+
+impl TypeScript for Point {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Point".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("x", TypeDef::Primitive(Primitive::Number)),
+                Field::new("y", TypeDef::Primitive(Primitive::Number)),
+            ])),
+        }
     }
 }
 
@@ -999,7 +1011,7 @@ mod tests {
 // ============================================================================
 
 /// Unit variant enum - derived
-#[derive(Debug, Clone, TypeScript)]
+#[derive(Debug, Clone, DeriveTypeScript)]
 pub enum DerivedStatus {
     Pending,
     Active,
@@ -1008,14 +1020,14 @@ pub enum DerivedStatus {
 }
 
 /// Tuple variant enum - derived
-#[derive(Debug, Clone, TypeScript)]
+#[derive(Debug, Clone, DeriveTypeScript)]
 pub enum DerivedCoordinate {
     D2(f64, f64),
     D3(f64, f64, f64),
 }
 
 /// Struct variant enum - derived
-#[derive(Debug, Clone, TypeScript)]
+#[derive(Debug, Clone, DeriveTypeScript)]
 pub enum DerivedShape {
     Circle { center: Point, radius: f64 },
     Rectangle { top_left: Point, width: f64, height: f64 },
@@ -1023,7 +1035,7 @@ pub enum DerivedShape {
 }
 
 /// Mixed variant enum - derived
-#[derive(Debug, Clone, TypeScript)]
+#[derive(Debug, Clone, DeriveTypeScript)]
 pub enum DerivedMessage {
     Ping,
     Text(String),
@@ -1032,14 +1044,14 @@ pub enum DerivedMessage {
 }
 
 /// Generic enum - derived
-#[derive(Debug, Clone, TypeScript)]
-pub enum DerivedOptionalValue<T: TypeScriptType> {
+#[derive(Debug, Clone, DeriveTypeScript)]
+pub enum DerivedOptionalValue<T: TypeScript> {
     None,
     Some(T),
 }
 
 /// Error enum - derived
-#[derive(Debug, Clone, TypeScript)]
+#[derive(Debug, Clone, DeriveTypeScript)]
 pub enum DerivedRpcError {
     NotFound { resource: String },
     Unauthorized,
@@ -1052,55 +1064,70 @@ pub enum DerivedRpcError {
 mod derive_tests {
     use super::*;
 
+    /// Helper to get the inner definition from a Named TypeDef
+    fn inner_def(td: TypeDef) -> TypeDef {
+        match td {
+            TypeDef::Named { def, .. } => *def,
+            other => other,
+        }
+    }
+
     #[test]
     fn test_derived_unit_enum() {
         // Pure unit enums should produce simple string unions
+        let td = DerivedStatus::typescript();
         assert_eq!(
-            DerivedStatus::typescript_type(),
+            inner_def(td.clone()).render(),
             r#""Pending" | "Active" | "Completed" | "Failed""#
         );
-        assert_eq!(DerivedStatus::typescript_name(), "DerivedStatus");
+        assert_eq!(td.render(), "DerivedStatus");
     }
 
     #[test]
     fn test_derived_tuple_enum() {
+        let td = DerivedCoordinate::typescript();
         assert_eq!(
-            DerivedCoordinate::typescript_type(),
+            inner_def(td.clone()).render(),
             r#"{ type: "D2"; value: [number, number] } | { type: "D3"; value: [number, number, number] }"#
         );
-        assert_eq!(DerivedCoordinate::typescript_name(), "DerivedCoordinate");
+        assert_eq!(td.render(), "DerivedCoordinate");
     }
 
     #[test]
     fn test_derived_struct_enum() {
+        let td = DerivedShape::typescript();
+        // Note: Point now renders as "Point" (named type reference)
         assert_eq!(
-            DerivedShape::typescript_type(),
-            r#"{ type: "Circle"; center: { x: number; y: number }; radius: number } | { type: "Rectangle"; top_left: { x: number; y: number }; width: number; height: number } | { type: "Triangle"; a: { x: number; y: number }; b: { x: number; y: number }; c: { x: number; y: number } }"#
+            inner_def(td.clone()).render(),
+            r#"{ type: "Circle"; center: Point; radius: number } | { type: "Rectangle"; top_left: Point; width: number; height: number } | { type: "Triangle"; a: Point; b: Point; c: Point }"#
         );
-        assert_eq!(DerivedShape::typescript_name(), "DerivedShape");
+        assert_eq!(td.render(), "DerivedShape");
     }
 
     #[test]
     fn test_derived_mixed_enum() {
+        let td = DerivedMessage::typescript();
         assert_eq!(
-            DerivedMessage::typescript_type(),
+            inner_def(td.clone()).render(),
             r#"{ type: "Ping" } | { type: "Text"; value: string } | { type: "Binary"; value: number[] } | { type: "Error"; code: number; message: string }"#
         );
-        assert_eq!(DerivedMessage::typescript_name(), "DerivedMessage");
+        assert_eq!(td.render(), "DerivedMessage");
     }
 
     #[test]
     fn test_derived_generic_enum() {
+        let td = <DerivedOptionalValue<String>>::typescript();
         assert_eq!(
-            <DerivedOptionalValue<String>>::typescript_type(),
+            inner_def(td).render(),
             r#"{ type: "None" } | { type: "Some"; value: string }"#
         );
     }
 
     #[test]
     fn test_derived_error_enum() {
+        let td = DerivedRpcError::typescript();
         assert_eq!(
-            DerivedRpcError::typescript_type(),
+            inner_def(td).render(),
             r#"{ type: "NotFound"; resource: string } | { type: "Unauthorized" } | { type: "Forbidden"; reason: string } | { type: "BadRequest"; field: string; message: string } | { type: "Internal" }"#
         );
     }
@@ -1108,28 +1135,40 @@ mod derive_tests {
     // Compare derived vs manual implementations
     #[test]
     fn test_derived_matches_manual_status() {
-        assert_eq!(DerivedStatus::typescript_type(), Status::typescript_type());
+        assert_eq!(
+            inner_def(DerivedStatus::typescript()).render(),
+            Status::typescript_type()
+        );
     }
 
     #[test]
     fn test_derived_matches_manual_coordinate() {
-        assert_eq!(DerivedCoordinate::typescript_type(), Coordinate::typescript_type());
+        assert_eq!(
+            inner_def(DerivedCoordinate::typescript()).render(),
+            Coordinate::typescript_type()
+        );
     }
 
     #[test]
     fn test_derived_matches_manual_message() {
-        assert_eq!(DerivedMessage::typescript_type(), Message::typescript_type());
+        assert_eq!(
+            inner_def(DerivedMessage::typescript()).render(),
+            Message::typescript_type()
+        );
     }
 
     #[test]
     fn test_derived_matches_manual_rpc_error() {
-        assert_eq!(DerivedRpcError::typescript_type(), RpcError::typescript_type());
+        assert_eq!(
+            inner_def(DerivedRpcError::typescript()).render(),
+            RpcError::typescript_type()
+        );
     }
 
     #[test]
     fn test_derived_matches_manual_optional_value() {
         assert_eq!(
-            <DerivedOptionalValue<String>>::typescript_type(),
+            inner_def(<DerivedOptionalValue<String>>::typescript()).render(),
             <OptionalValue<String>>::typescript_type()
         );
     }
