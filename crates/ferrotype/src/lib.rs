@@ -312,6 +312,310 @@ impl Literal {
 }
 
 // ============================================================================
+// TYPE REGISTRY
+// ============================================================================
+
+use std::collections::{HashSet, VecDeque};
+
+/// A registry for collecting and managing TypeScript type definitions.
+///
+/// The TypeRegistry collects named types, resolves their dependency order,
+/// and renders them to a TypeScript file. This enables:
+/// - **Deduplication**: Each named type is emitted once
+/// - **Ordering**: Types are emitted in dependency order
+/// - **Output**: Generate valid .ts or .d.ts files
+///
+/// # Example
+///
+/// ```ignore
+/// use ferrotype::{TypeRegistry, TypeScript};
+///
+/// let mut registry = TypeRegistry::new();
+/// registry.register::<User>();
+/// registry.register::<Post>();
+///
+/// let output = registry.render();
+/// std::fs::write("types.ts", output)?;
+/// ```
+#[derive(Debug, Default)]
+pub struct TypeRegistry {
+    /// Named type definitions, keyed by name
+    types: HashMap<String, TypeDef>,
+    /// Order in which types were registered (for stable output when no deps)
+    registration_order: Vec<String>,
+}
+
+impl TypeRegistry {
+    /// Creates a new empty registry.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Registers a type that implements TypeScript.
+    ///
+    /// This extracts all named types from the type definition and adds them
+    /// to the registry. Named types are deduplicated by name.
+    pub fn register<T: TypeScript>(&mut self) {
+        let typedef = T::typescript();
+        self.add_typedef(typedef);
+    }
+
+    /// Adds a TypeDef to the registry, extracting all named types.
+    pub fn add_typedef(&mut self, typedef: TypeDef) {
+        self.extract_named_types(&typedef);
+    }
+
+    /// Recursively extracts all Named types from a TypeDef.
+    fn extract_named_types(&mut self, typedef: &TypeDef) {
+        match typedef {
+            TypeDef::Named { name, def } => {
+                if !self.types.contains_key(name) {
+                    self.types.insert(name.clone(), typedef.clone());
+                    self.registration_order.push(name.clone());
+                    // Also extract from the inner definition
+                    self.extract_named_types(def);
+                }
+            }
+            TypeDef::Array(inner) => self.extract_named_types(inner),
+            TypeDef::Tuple(items) => {
+                for item in items {
+                    self.extract_named_types(item);
+                }
+            }
+            TypeDef::Object(fields) => {
+                for field in fields {
+                    self.extract_named_types(&field.ty);
+                }
+            }
+            TypeDef::Union(items) | TypeDef::Intersection(items) => {
+                for item in items {
+                    self.extract_named_types(item);
+                }
+            }
+            TypeDef::Record { key, value } => {
+                self.extract_named_types(key);
+                self.extract_named_types(value);
+            }
+            TypeDef::Function { params, return_type } => {
+                for param in params {
+                    self.extract_named_types(&param.ty);
+                }
+                self.extract_named_types(return_type);
+            }
+            TypeDef::Generic { args, .. } => {
+                for arg in args {
+                    self.extract_named_types(arg);
+                }
+            }
+            // Primitives, Refs, and Literals have no nested named types
+            TypeDef::Primitive(_) | TypeDef::Ref(_) | TypeDef::Literal(_) => {}
+        }
+    }
+
+    /// Returns the number of registered types.
+    pub fn len(&self) -> usize {
+        self.types.len()
+    }
+
+    /// Returns true if no types are registered.
+    pub fn is_empty(&self) -> bool {
+        self.types.is_empty()
+    }
+
+    /// Returns the names of all registered types.
+    pub fn type_names(&self) -> impl Iterator<Item = &str> {
+        self.types.keys().map(|s| s.as_str())
+    }
+
+    /// Gets a type definition by name.
+    pub fn get(&self, name: &str) -> Option<&TypeDef> {
+        self.types.get(name)
+    }
+
+    /// Computes the dependencies for a type (what other named types it references).
+    fn get_dependencies(&self, typedef: &TypeDef) -> HashSet<String> {
+        let mut deps = HashSet::new();
+        self.collect_dependencies(typedef, &mut deps);
+        deps
+    }
+
+    /// Recursively collects dependencies from a TypeDef.
+    fn collect_dependencies(&self, typedef: &TypeDef, deps: &mut HashSet<String>) {
+        match typedef {
+            TypeDef::Named { def, .. } => {
+                // Don't add self as dependency, but check inner def
+                self.collect_dependencies(def, deps);
+            }
+            TypeDef::Ref(name) => {
+                if self.types.contains_key(name) {
+                    deps.insert(name.clone());
+                }
+            }
+            TypeDef::Array(inner) => self.collect_dependencies(inner, deps),
+            TypeDef::Tuple(items) => {
+                for item in items {
+                    self.collect_dependencies(item, deps);
+                }
+            }
+            TypeDef::Object(fields) => {
+                for field in fields {
+                    self.collect_dependencies(&field.ty, deps);
+                }
+            }
+            TypeDef::Union(variants) => {
+                for v in variants {
+                    self.collect_dependencies(v, deps);
+                }
+            }
+            TypeDef::Intersection(types) => {
+                for t in types {
+                    self.collect_dependencies(t, deps);
+                }
+            }
+            TypeDef::Record { key, value } => {
+                self.collect_dependencies(key, deps);
+                self.collect_dependencies(value, deps);
+            }
+            TypeDef::Function { params, return_type } => {
+                for param in params {
+                    self.collect_dependencies(&param.ty, deps);
+                }
+                self.collect_dependencies(return_type, deps);
+            }
+            TypeDef::Generic { args, .. } => {
+                for arg in args {
+                    self.collect_dependencies(arg, deps);
+                }
+            }
+            TypeDef::Primitive(_) | TypeDef::Literal(_) => {}
+        }
+    }
+
+    /// Returns types in dependency order (types with no dependencies first).
+    ///
+    /// Uses Kahn's algorithm for topological sort.
+    pub fn sorted_types(&self) -> Vec<&str> {
+        // Build dependency graph
+        let mut in_degree: HashMap<&str, usize> = HashMap::new();
+        let mut dependents: HashMap<&str, Vec<&str>> = HashMap::new();
+
+        // Initialize
+        for name in self.types.keys() {
+            in_degree.insert(name.as_str(), 0);
+            dependents.insert(name.as_str(), Vec::new());
+        }
+
+        // Calculate in-degrees and build reverse graph
+        for (name, typedef) in &self.types {
+            let deps = self.get_dependencies(typedef);
+            for dep in deps {
+                if let Some(dep_name) = self.types.get_key_value(&dep) {
+                    *in_degree.get_mut(name.as_str()).unwrap() += 1;
+                    dependents.get_mut(dep_name.0.as_str()).unwrap().push(name.as_str());
+                }
+            }
+        }
+
+        // Kahn's algorithm
+        let mut queue: VecDeque<&str> = VecDeque::new();
+        let mut result: Vec<&str> = Vec::new();
+
+        // Start with types that have no dependencies
+        for (name, &degree) in &in_degree {
+            if degree == 0 {
+                queue.push_back(name);
+            }
+        }
+
+        // Sort the initial queue by registration order for stable output
+        let mut initial: Vec<_> = queue.drain(..).collect();
+        initial.sort_by_key(|name| {
+            self.registration_order.iter().position(|n| n == *name).unwrap_or(usize::MAX)
+        });
+        queue.extend(initial);
+
+        while let Some(name) = queue.pop_front() {
+            result.push(name);
+
+            // Get dependents sorted by registration order for stable output
+            let mut deps: Vec<_> = dependents.get(name).map(|v| v.as_slice()).unwrap_or(&[]).to_vec();
+            deps.sort_by_key(|n| {
+                self.registration_order.iter().position(|name| name == *n).unwrap_or(usize::MAX)
+            });
+
+            for dependent in deps {
+                let degree = in_degree.get_mut(dependent).unwrap();
+                *degree -= 1;
+                if *degree == 0 {
+                    queue.push_back(dependent);
+                }
+            }
+        }
+
+        // If result doesn't contain all types, there's a cycle
+        // Fall back to registration order for remaining types
+        if result.len() < self.types.len() {
+            for name in &self.registration_order {
+                if !result.contains(&name.as_str()) {
+                    result.push(name.as_str());
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Renders all registered types to TypeScript declarations.
+    ///
+    /// Types are emitted in dependency order, with proper formatting.
+    pub fn render(&self) -> String {
+        let sorted = self.sorted_types();
+        let mut output = String::new();
+
+        // Add header comment
+        output.push_str("// Generated by ferrotype\n");
+        output.push_str("// Do not edit manually\n\n");
+
+        for name in sorted {
+            if let Some(typedef) = self.types.get(name) {
+                output.push_str(&typedef.render_declaration());
+                output.push_str("\n\n");
+            }
+        }
+
+        // Remove trailing newline
+        output.trim_end().to_string() + "\n"
+    }
+
+    /// Renders all registered types with `export` keywords.
+    pub fn render_exported(&self) -> String {
+        let sorted = self.sorted_types();
+        let mut output = String::new();
+
+        // Add header comment
+        output.push_str("// Generated by ferrotype\n");
+        output.push_str("// Do not edit manually\n\n");
+
+        for name in sorted {
+            if let Some(typedef) = self.types.get(name) {
+                if let TypeDef::Named { name, def } = typedef {
+                    output.push_str(&format!("export type {} = {};\n\n", name, def.render()));
+                }
+            }
+        }
+
+        // Remove trailing newline
+        output.trim_end().to_string() + "\n"
+    }
+
+    /// Clears all registered types.
+    pub fn clear(&mut self) {
+        self.types.clear();
+        self.registration_order.clear();
+    }
+}
+
+// ============================================================================
 // TypeScript TRAIT IMPLEMENTATIONS FOR PRIMITIVES
 // ============================================================================
 
@@ -1494,5 +1798,217 @@ mod tests {
     fn test_rpc_error_type_default_guards() {
         // Default implementation returns empty string
         assert_eq!(ApiError::typescript_type_guards(), "");
+    }
+
+    // ========================================================================
+    // TYPE REGISTRY TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_registry_new() {
+        let registry = TypeRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+    }
+
+    #[test]
+    fn test_registry_add_typedef() {
+        let mut registry = TypeRegistry::new();
+
+        let user_type = TypeDef::Named {
+            name: "User".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Primitive(Primitive::String)),
+                Field::new("name", TypeDef::Primitive(Primitive::String)),
+            ])),
+        };
+
+        registry.add_typedef(user_type);
+
+        assert_eq!(registry.len(), 1);
+        assert!(registry.get("User").is_some());
+    }
+
+    #[test]
+    fn test_registry_deduplication() {
+        let mut registry = TypeRegistry::new();
+
+        let user_type = TypeDef::Named {
+            name: "User".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        };
+
+        registry.add_typedef(user_type.clone());
+        registry.add_typedef(user_type);
+
+        // Should only have one User type
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn test_registry_extracts_nested_types() {
+        let mut registry = TypeRegistry::new();
+
+        // Post type that references User type
+        let user_type = TypeDef::Named {
+            name: "User".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Primitive(Primitive::String)),
+            ])),
+        };
+
+        let post_type = TypeDef::Named {
+            name: "Post".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("title", TypeDef::Primitive(Primitive::String)),
+                Field::new("author", user_type),
+            ])),
+        };
+
+        registry.add_typedef(post_type);
+
+        // Should have both Post and User
+        assert_eq!(registry.len(), 2);
+        assert!(registry.get("Post").is_some());
+        assert!(registry.get("User").is_some());
+    }
+
+    #[test]
+    fn test_registry_render() {
+        let mut registry = TypeRegistry::new();
+
+        let user_type = TypeDef::Named {
+            name: "User".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Primitive(Primitive::String)),
+                Field::new("name", TypeDef::Primitive(Primitive::String)),
+            ])),
+        };
+
+        registry.add_typedef(user_type);
+
+        let output = registry.render();
+        assert!(output.contains("// Generated by ferrotype"));
+        assert!(output.contains("type User = { id: string; name: string };"));
+    }
+
+    #[test]
+    fn test_registry_render_exported() {
+        let mut registry = TypeRegistry::new();
+
+        let user_type = TypeDef::Named {
+            name: "User".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        };
+
+        registry.add_typedef(user_type);
+
+        let output = registry.render_exported();
+        assert!(output.contains("export type User = string;"));
+    }
+
+    #[test]
+    fn test_registry_dependency_order() {
+        let mut registry = TypeRegistry::new();
+
+        // UserId type (no dependencies)
+        let user_id = TypeDef::Named {
+            name: "UserId".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        };
+
+        // User type depends on UserId via Ref
+        let user = TypeDef::Named {
+            name: "User".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Ref("UserId".to_string())),
+                Field::new("name", TypeDef::Primitive(Primitive::String)),
+            ])),
+        };
+
+        // Add in reverse order (User before UserId)
+        registry.add_typedef(user);
+        registry.add_typedef(user_id);
+
+        let sorted = registry.sorted_types();
+
+        // UserId should come before User
+        let user_id_pos = sorted.iter().position(|&n| n == "UserId").unwrap();
+        let user_pos = sorted.iter().position(|&n| n == "User").unwrap();
+        assert!(user_id_pos < user_pos, "UserId should come before User");
+    }
+
+    #[test]
+    fn test_registry_clear() {
+        let mut registry = TypeRegistry::new();
+
+        let user_type = TypeDef::Named {
+            name: "User".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        };
+
+        registry.add_typedef(user_type);
+        assert_eq!(registry.len(), 1);
+
+        registry.clear();
+        assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn test_registry_type_names() {
+        let mut registry = TypeRegistry::new();
+
+        registry.add_typedef(TypeDef::Named {
+            name: "Alpha".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        });
+        registry.add_typedef(TypeDef::Named {
+            name: "Beta".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::Number)),
+        });
+
+        let names: Vec<_> = registry.type_names().collect();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"Alpha"));
+        assert!(names.contains(&"Beta"));
+    }
+
+    #[test]
+    fn test_registry_complex_dependencies() {
+        let mut registry = TypeRegistry::new();
+
+        // A -> B -> C (C should come first)
+        let c = TypeDef::Named {
+            name: "C".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        };
+
+        let b = TypeDef::Named {
+            name: "B".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("c", TypeDef::Ref("C".to_string())),
+            ])),
+        };
+
+        let a = TypeDef::Named {
+            name: "A".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("b", TypeDef::Ref("B".to_string())),
+            ])),
+        };
+
+        // Add in wrong order
+        registry.add_typedef(a);
+        registry.add_typedef(b);
+        registry.add_typedef(c);
+
+        let sorted = registry.sorted_types();
+
+        let c_pos = sorted.iter().position(|&n| n == "C").unwrap();
+        let b_pos = sorted.iter().position(|&n| n == "B").unwrap();
+        let a_pos = sorted.iter().position(|&n| n == "A").unwrap();
+
+        assert!(c_pos < b_pos, "C should come before B");
+        assert!(b_pos < a_pos, "B should come before A");
     }
 }
