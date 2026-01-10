@@ -1,6 +1,14 @@
 //! Tests for #[derive(TypeScript)] on structs
 
-use ferrotype::{TypeScript, TypeScriptType};
+use ferrotype::{TypeScript, TypeDef};
+
+/// Helper to get the inner definition from a Named TypeDef
+fn inner_def(td: TypeDef) -> TypeDef {
+    match td {
+        TypeDef::Named { def, .. } => *def,
+        other => other,
+    }
+}
 
 // ============================================================================
 // NAMED STRUCT TESTS
@@ -15,15 +23,18 @@ struct SimpleUser {
 
 #[test]
 fn test_named_struct() {
-    let ts = SimpleUser::typescript_type();
-    assert!(ts.contains("id: string"));
-    assert!(ts.contains("name: string"));
-    assert!(ts.contains("age: number"));
+    let td = SimpleUser::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("id: string"));
+    assert!(rendered.contains("name: string"));
+    assert!(rendered.contains("age: number"));
 }
 
 #[test]
 fn test_named_struct_name() {
-    assert_eq!(SimpleUser::typescript_name(), "SimpleUser");
+    let td = SimpleUser::typescript();
+    // Named types render as just their name
+    assert_eq!(td.render(), "SimpleUser");
 }
 
 #[derive(TypeScript)]
@@ -31,7 +42,8 @@ struct EmptyStruct {}
 
 #[test]
 fn test_empty_struct() {
-    assert_eq!(EmptyStruct::typescript_type(), "{}");
+    let td = EmptyStruct::typescript();
+    assert_eq!(inner_def(td).render(), "{}");
 }
 
 #[derive(TypeScript)]
@@ -42,10 +54,11 @@ struct NestedStruct {
 
 #[test]
 fn test_nested_struct() {
-    let ts = NestedStruct::typescript_type();
-    // The user field should reference SimpleUser's typescript type
-    assert!(ts.contains("user:"));
-    assert!(ts.contains("active: boolean"));
+    let td = NestedStruct::typescript();
+    let rendered = inner_def(td).render();
+    // The user field should reference SimpleUser (which renders as its name)
+    assert!(rendered.contains("user: SimpleUser"));
+    assert!(rendered.contains("active: boolean"));
 }
 
 // ============================================================================
@@ -58,7 +71,8 @@ struct NewtypeString(String);
 #[test]
 fn test_newtype_struct() {
     // Newtypes should unwrap to their inner type
-    assert_eq!(NewtypeString::typescript_type(), "string");
+    let td = NewtypeString::typescript();
+    assert_eq!(inner_def(td).render(), "string");
 }
 
 #[derive(TypeScript)]
@@ -66,7 +80,8 @@ struct TupleTwo(String, i32);
 
 #[test]
 fn test_tuple_struct() {
-    assert_eq!(TupleTwo::typescript_type(), "[string, number]");
+    let td = TupleTwo::typescript();
+    assert_eq!(inner_def(td).render(), "[string, number]");
 }
 
 #[derive(TypeScript)]
@@ -74,7 +89,8 @@ struct TupleThree(String, i32, bool);
 
 #[test]
 fn test_tuple_three() {
-    assert_eq!(TupleThree::typescript_type(), "[string, number, boolean]");
+    let td = TupleThree::typescript();
+    assert_eq!(inner_def(td).render(), "[string, number, boolean]");
 }
 
 // ============================================================================
@@ -86,7 +102,8 @@ struct UnitStruct;
 
 #[test]
 fn test_unit_struct() {
-    assert_eq!(UnitStruct::typescript_type(), "null");
+    let td = UnitStruct::typescript();
+    assert_eq!(inner_def(td).render(), "null");
 }
 
 // ============================================================================
@@ -100,8 +117,11 @@ struct Container<T> {
 
 #[test]
 fn test_generic_struct() {
-    assert!(Container::<String>::typescript_type().contains("value: string"));
-    assert!(Container::<i32>::typescript_type().contains("value: number"));
+    let td_string = Container::<String>::typescript();
+    assert!(inner_def(td_string).render().contains("value: string"));
+
+    let td_i32 = Container::<i32>::typescript();
+    assert!(inner_def(td_i32).render().contains("value: number"));
 }
 
 #[derive(TypeScript)]
@@ -112,9 +132,10 @@ struct Pair<A, B> {
 
 #[test]
 fn test_multi_generic_struct() {
-    let ts = Pair::<String, i32>::typescript_type();
-    assert!(ts.contains("first: string"));
-    assert!(ts.contains("second: number"));
+    let td = Pair::<String, i32>::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("first: string"));
+    assert!(rendered.contains("second: number"));
 }
 
 // ============================================================================
@@ -130,10 +151,11 @@ struct ComplexFields {
 
 #[test]
 fn test_complex_fields() {
-    let ts = ComplexFields::typescript_type();
-    assert!(ts.contains("items: string[]"));
-    assert!(ts.contains("maybe_count: number | null"));
-    assert!(ts.contains("result:"));
+    let td = ComplexFields::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("items: string[]"));
+    assert!(rendered.contains("maybe_count: number | null"));
+    assert!(rendered.contains("result:"));
 }
 
 // ============================================================================
@@ -154,16 +176,18 @@ struct GetUserResponse {
 
 #[test]
 fn test_rpc_request_type() {
-    let ts = GetUserRequest::typescript_type();
-    assert!(ts.contains("user_id: string"));
+    let td = GetUserRequest::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("user_id: string"));
 }
 
 #[test]
 fn test_rpc_response_type() {
-    let ts = GetUserResponse::typescript_type();
-    assert!(ts.contains("id: string"));
-    assert!(ts.contains("username: string"));
-    assert!(ts.contains("email: string | null"));
+    let td = GetUserResponse::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("id: string"));
+    assert!(rendered.contains("username: string"));
+    assert!(rendered.contains("email: string | null"));
 }
 
 #[derive(TypeScript)]
@@ -181,15 +205,17 @@ struct ListUsersResponse {
 
 #[test]
 fn test_list_request() {
-    let ts = ListUsersRequest::typescript_type();
-    assert!(ts.contains("page: number"));
-    assert!(ts.contains("page_size: number"));
+    let td = ListUsersRequest::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("page: number"));
+    assert!(rendered.contains("page_size: number"));
 }
 
 #[test]
 fn test_list_response() {
-    let ts = ListUsersResponse::typescript_type();
-    assert!(ts.contains("users:"));
-    assert!(ts.contains("total_count: number"));
-    assert!(ts.contains("has_more: boolean"));
+    let td = ListUsersResponse::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("users:"));
+    assert!(rendered.contains("total_count: number"));
+    assert!(rendered.contains("has_more: boolean"));
 }

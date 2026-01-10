@@ -3,7 +3,15 @@
 //! These tests verify that the derive macro generates correct TypeScript
 //! discriminated union types for various enum patterns.
 
-use ferrotype::{TypeScript, TypeScriptType};
+use ferrotype::{TypeScript, TypeDef, Primitive};
+
+/// Helper to get the inner definition from a Named TypeDef
+fn inner_def(td: TypeDef) -> TypeDef {
+    match td {
+        TypeDef::Named { def, .. } => *def,
+        other => other,
+    }
+}
 
 // ============================================================================
 // UNIT VARIANT TESTS
@@ -18,11 +26,10 @@ enum SimpleStatus {
 
 #[test]
 fn test_unit_variant_enum() {
-    assert_eq!(
-        SimpleStatus::typescript_type(),
-        r#""Pending" | "Active" | "Completed""#
-    );
-    assert_eq!(SimpleStatus::typescript_name(), "SimpleStatus");
+    let td = SimpleStatus::typescript();
+    let rendered = inner_def(td.clone()).render();
+    assert_eq!(rendered, r#""Pending" | "Active" | "Completed""#);
+    assert_eq!(td.render(), "SimpleStatus");
 }
 
 #[derive(TypeScript)]
@@ -32,8 +39,9 @@ enum SingleVariant {
 
 #[test]
 fn test_single_unit_variant() {
-    assert_eq!(SingleVariant::typescript_type(), r#""Only""#);
-    assert_eq!(SingleVariant::typescript_name(), "SingleVariant");
+    let td = SingleVariant::typescript();
+    assert_eq!(inner_def(td.clone()).render(), r#""Only""#);
+    assert_eq!(td.render(), "SingleVariant");
 }
 
 // ============================================================================
@@ -48,11 +56,13 @@ enum Coordinate {
 
 #[test]
 fn test_tuple_variant_enum() {
+    let td = Coordinate::typescript();
+    let rendered = inner_def(td.clone()).render();
     assert_eq!(
-        Coordinate::typescript_type(),
+        rendered,
         r#"{ type: "D2"; value: [number, number] } | { type: "D3"; value: [number, number, number] }"#
     );
-    assert_eq!(Coordinate::typescript_name(), "Coordinate");
+    assert_eq!(td.render(), "Coordinate");
 }
 
 #[derive(TypeScript)]
@@ -63,8 +73,9 @@ enum NewtypeWrapper {
 
 #[test]
 fn test_newtype_variant_enum() {
+    let td = NewtypeWrapper::typescript();
     assert_eq!(
-        NewtypeWrapper::typescript_type(),
+        inner_def(td).render(),
         r#"{ type: "Text"; value: string } | { type: "Number"; value: number }"#
     );
 }
@@ -78,12 +89,9 @@ struct Point {
     _y: f64,
 }
 
-impl TypeScriptType for Point {
-    fn typescript_type() -> String {
-        "Point".to_string()
-    }
-    fn typescript_name() -> &'static str {
-        "Point"
+impl TypeScript for Point {
+    fn typescript() -> TypeDef {
+        TypeDef::Ref("Point".to_string())
     }
 }
 
@@ -95,11 +103,13 @@ enum Shape {
 
 #[test]
 fn test_struct_variant_enum() {
+    let td = Shape::typescript();
+    let rendered = inner_def(td.clone()).render();
     assert_eq!(
-        Shape::typescript_type(),
+        rendered,
         r#"{ type: "Circle"; center: Point; radius: number } | { type: "Rectangle"; width: number; height: number }"#
     );
-    assert_eq!(Shape::typescript_name(), "Shape");
+    assert_eq!(td.render(), "Shape");
 }
 
 // ============================================================================
@@ -116,11 +126,13 @@ enum Message {
 
 #[test]
 fn test_mixed_variant_enum() {
+    let td = Message::typescript();
+    let rendered = inner_def(td.clone()).render();
     assert_eq!(
-        Message::typescript_type(),
+        rendered,
         r#"{ type: "Ping" } | { type: "Text"; value: string } | { type: "Binary"; value: number[] } | { type: "Error"; code: number; message: string }"#
     );
-    assert_eq!(Message::typescript_name(), "Message");
+    assert_eq!(td.render(), "Message");
 }
 
 // ============================================================================
@@ -135,14 +147,16 @@ enum OptionalValue<T> {
 
 #[test]
 fn test_generic_enum() {
+    let td_string = <OptionalValue<String>>::typescript();
     assert_eq!(
-        <OptionalValue<String>>::typescript_type(),
+        inner_def(td_string.clone()).render(),
         r#"{ type: "None" } | { type: "Some"; value: string }"#
     );
-    assert_eq!(<OptionalValue<String>>::typescript_name(), "OptionalValue");
+    assert_eq!(td_string.render(), "OptionalValue");
 
+    let td_i32 = <OptionalValue<i32>>::typescript();
     assert_eq!(
-        <OptionalValue<i32>>::typescript_type(),
+        inner_def(td_i32).render(),
         r#"{ type: "None" } | { type: "Some"; value: number }"#
     );
 }
@@ -155,8 +169,9 @@ enum ResultLike<T, E> {
 
 #[test]
 fn test_multi_generic_enum() {
+    let td = <ResultLike<String, i32>>::typescript();
     assert_eq!(
-        <ResultLike<String, i32>>::typescript_type(),
+        inner_def(td).render(),
         r#"{ type: "Ok"; value: string } | { type: "Err"; value: number }"#
     );
 }
@@ -175,12 +190,13 @@ enum ComplexVariants {
 
 #[test]
 fn test_complex_nested_types() {
-    let ts = ComplexVariants::typescript_type();
-    assert!(ts.contains(r#"{ type: "Empty" }"#));
-    assert!(ts.contains(r#"{ type: "Simple"; value: string }"#));
-    // Vec<Option<String>> becomes string | null[] (note: parentheses not added for union types)
-    assert!(ts.contains(r#"{ type: "Nested"; value: string | null[] }"#));
-    assert!(ts.contains(r#"{ type: "Struct"; items: number[]; count: number }"#));
+    let td = ComplexVariants::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains(r#"{ type: "Empty" }"#));
+    assert!(rendered.contains(r#"{ type: "Simple"; value: string }"#));
+    // Vec<Option<String>> becomes (string | null)[] with parens for union in array
+    assert!(rendered.contains(r#"{ type: "Nested"; value: (string | null)[] }"#));
+    assert!(rendered.contains(r#"{ type: "Struct"; items: number[]; count: number }"#));
 }
 
 // ============================================================================
@@ -189,10 +205,10 @@ fn test_complex_nested_types() {
 
 #[test]
 fn test_derive_enum_snapshots() {
-    insta::assert_snapshot!("derive_unit_enum", SimpleStatus::typescript_type());
-    insta::assert_snapshot!("derive_tuple_enum", Coordinate::typescript_type());
-    insta::assert_snapshot!("derive_struct_enum", Shape::typescript_type());
-    insta::assert_snapshot!("derive_mixed_enum", Message::typescript_type());
-    insta::assert_snapshot!("derive_generic_enum_string", <OptionalValue<String>>::typescript_type());
-    insta::assert_snapshot!("derive_generic_enum_i32", <OptionalValue<i32>>::typescript_type());
+    insta::assert_snapshot!("derive_unit_enum", inner_def(SimpleStatus::typescript()).render());
+    insta::assert_snapshot!("derive_tuple_enum", inner_def(Coordinate::typescript()).render());
+    insta::assert_snapshot!("derive_struct_enum", inner_def(Shape::typescript()).render());
+    insta::assert_snapshot!("derive_mixed_enum", inner_def(Message::typescript()).render());
+    insta::assert_snapshot!("derive_generic_enum_string", inner_def(<OptionalValue<String>>::typescript()).render());
+    insta::assert_snapshot!("derive_generic_enum_i32", inner_def(<OptionalValue<i32>>::typescript()).render());
 }

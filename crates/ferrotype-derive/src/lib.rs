@@ -62,12 +62,12 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     match &input.data {
         Data::Enum(data) => {
-            let typescript_type = generate_enum_typescript(&data.variants)?;
-            generate_impl(name, &name_str, generics, typescript_type)
+            let typedef = generate_enum_typedef(&data.variants)?;
+            generate_impl(name, &name_str, generics, typedef)
         }
         Data::Struct(data) => {
-            let typescript_type = generate_struct_typescript(&data.fields)?;
-            generate_impl(name, &name_str, generics, typescript_type)
+            let typedef = generate_struct_typedef(&data.fields)?;
+            generate_impl(name, &name_str, generics, typedef)
         }
         Data::Union(_) => {
             Err(syn::Error::new_spanned(
@@ -78,7 +78,7 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
 }
 
-fn generate_enum_typescript(
+fn generate_enum_typedef(
     variants: &syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
 ) -> syn::Result<TokenStream2> {
     if variants.is_empty() {
@@ -93,156 +93,177 @@ fn generate_enum_typescript(
 
     if all_unit {
         // Generate string literal union: "Pending" | "Active" | "Completed"
-        let variant_strings: Vec<String> = variants
+        let variant_exprs: Vec<TokenStream2> = variants
             .iter()
-            .map(|v| format!(r#""{}""#, v.ident))
+            .map(|v| {
+                let name = v.ident.to_string();
+                quote! { ferrotype::TypeDef::Literal(ferrotype::Literal::String(#name.to_string())) }
+            })
             .collect();
-        let joined = variant_strings.join(" | ");
-        Ok(quote! { #joined.to_string() })
-    } else {
-        // Generate discriminated union with type field
-        let mut variant_exprs: Vec<TokenStream2> = Vec::new();
-
-        for variant in variants.iter() {
-            let variant_name = &variant.ident;
-            let variant_name_str = variant_name.to_string();
-
-            match &variant.fields {
-                Fields::Unit => {
-                    // { type: "VariantName" }
-                    let ts = format!(r#"{{ type: "{}" }}"#, variant_name_str);
-                    variant_exprs.push(quote! { #ts.to_string() });
-                }
-                Fields::Unnamed(fields) => {
-                    // { type: "VariantName"; value: [T1, T2, ...] } for tuples
-                    // { type: "VariantName"; value: T } for newtype
-                    if fields.unnamed.len() == 1 {
-                        // Newtype variant: { type: "Text"; value: string }
-                        let field_type = &fields.unnamed.first().unwrap().ty;
-                        let type_expr = type_to_typescript(field_type);
-                        variant_exprs.push(quote! {
-                            format!(r#"{{ type: "{}"; value: {} }}"#, #variant_name_str, #type_expr)
-                        });
-                    } else {
-                        // Tuple variant: { type: "D2"; value: [number, number] }
-                        let field_types: Vec<_> = fields.unnamed.iter().map(|f| &f.ty).collect();
-                        let type_exprs: Vec<TokenStream2> = field_types
-                            .iter()
-                            .map(|t| type_to_typescript(t))
-                            .collect();
-
-                        variant_exprs.push(quote! {
-                            {
-                                let types = vec![#(#type_exprs),*];
-                                format!(r#"{{ type: "{}"; value: [{}] }}"#, #variant_name_str, types.join(", "))
-                            }
-                        });
-                    }
-                }
-                Fields::Named(fields) => {
-                    // { type: "Circle"; center: Point; radius: number }
-                    let field_parts: Vec<_> = fields.named.iter().map(|f| {
-                        let field_name = f.ident.as_ref().unwrap().to_string();
-                        let field_type = &f.ty;
-                        let type_expr = type_to_typescript(field_type);
-                        quote! {
-                            format!("{}: {}", #field_name, #type_expr)
-                        }
-                    }).collect();
-
-                    variant_exprs.push(quote! {
-                        {
-                            let fields = vec![#(#field_parts),*];
-                            format!(r#"{{ type: "{}"; {} }}"#, #variant_name_str, fields.join("; "))
-                        }
-                    });
-                }
-            }
-        }
 
         Ok(quote! {
-            {
-                let variants = vec![#(#variant_exprs),*];
-                variants.join(" | ")
-            }
+            ferrotype::TypeDef::Union(vec![#(#variant_exprs),*])
+        })
+    } else {
+        // Generate discriminated union with type field
+        let variant_exprs: Vec<TokenStream2> = variants
+            .iter()
+            .map(|variant| {
+                let variant_name_str = variant.ident.to_string();
+
+                match &variant.fields {
+                    Fields::Unit => {
+                        // { type: "VariantName" }
+                        quote! {
+                            ferrotype::TypeDef::Object(vec![
+                                ferrotype::Field::new(
+                                    "type",
+                                    ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                )
+                            ])
+                        }
+                    }
+                    Fields::Unnamed(fields) => {
+                        if fields.unnamed.len() == 1 {
+                            // Newtype variant: { type: "Text"; value: T }
+                            let field_type = &fields.unnamed.first().unwrap().ty;
+                            let type_expr = type_to_typedef(field_type);
+                            quote! {
+                                ferrotype::TypeDef::Object(vec![
+                                    ferrotype::Field::new(
+                                        "type",
+                                        ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                    ),
+                                    ferrotype::Field::new("value", #type_expr)
+                                ])
+                            }
+                        } else {
+                            // Tuple variant: { type: "D2"; value: [T1, T2] }
+                            let field_exprs: Vec<TokenStream2> = fields
+                                .unnamed
+                                .iter()
+                                .map(|f| type_to_typedef(&f.ty))
+                                .collect();
+                            quote! {
+                                ferrotype::TypeDef::Object(vec![
+                                    ferrotype::Field::new(
+                                        "type",
+                                        ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                    ),
+                                    ferrotype::Field::new(
+                                        "value",
+                                        ferrotype::TypeDef::Tuple(vec![#(#field_exprs),*])
+                                    )
+                                ])
+                            }
+                        }
+                    }
+                    Fields::Named(fields) => {
+                        // { type: "Circle"; center: Point; radius: number }
+                        let field_exprs: Vec<TokenStream2> = fields
+                            .named
+                            .iter()
+                            .map(|f| {
+                                let field_name = f.ident.as_ref().unwrap().to_string();
+                                let field_type = &f.ty;
+                                let type_expr = type_to_typedef(field_type);
+                                quote! {
+                                    ferrotype::Field::new(#field_name, #type_expr)
+                                }
+                            })
+                            .collect();
+
+                        quote! {
+                            ferrotype::TypeDef::Object({
+                                let mut fields = vec![
+                                    ferrotype::Field::new(
+                                        "type",
+                                        ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                    )
+                                ];
+                                fields.extend(vec![#(#field_exprs),*]);
+                                fields
+                            })
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        Ok(quote! {
+            ferrotype::TypeDef::Union(vec![#(#variant_exprs),*])
         })
     }
 }
 
-fn generate_struct_typescript(fields: &syn::Fields) -> syn::Result<TokenStream2> {
+fn generate_struct_typedef(fields: &syn::Fields) -> syn::Result<TokenStream2> {
     match fields {
         syn::Fields::Named(fields) => {
-            // Named struct: { field1: type1; field2: type2 }
+            // Named struct: Object with fields
             if fields.named.is_empty() {
                 // Empty struct becomes empty object
-                return Ok(quote! { "{}".to_string() });
+                return Ok(quote! { ferrotype::TypeDef::Object(vec![]) });
             }
 
-            let field_parts: Vec<TokenStream2> = fields
+            let field_exprs: Vec<TokenStream2> = fields
                 .named
                 .iter()
                 .map(|f| {
                     let field_name = f.ident.as_ref().unwrap().to_string();
                     let field_type = &f.ty;
-                    let type_expr = type_to_typescript(field_type);
+                    let type_expr = type_to_typedef(field_type);
                     quote! {
-                        format!("{}: {}", #field_name, #type_expr)
+                        ferrotype::Field::new(#field_name, #type_expr)
                     }
                 })
                 .collect();
 
             Ok(quote! {
-                {
-                    let fields = vec![#(#field_parts),*];
-                    format!("{{ {} }}", fields.join("; "))
-                }
+                ferrotype::TypeDef::Object(vec![#(#field_exprs),*])
             })
         }
         syn::Fields::Unnamed(fields) => {
-            // Tuple struct: [type1, type2, ...]
+            // Tuple struct
             if fields.unnamed.len() == 1 {
                 // Newtype: unwrap to inner type
                 let field_type = &fields.unnamed.first().unwrap().ty;
-                let type_expr = type_to_typescript(field_type);
+                let type_expr = type_to_typedef(field_type);
                 Ok(quote! { #type_expr })
             } else {
-                // Tuple: [type1, type2]
-                let field_types: Vec<TokenStream2> = fields
+                // Tuple: [type1, type2, ...]
+                let field_exprs: Vec<TokenStream2> = fields
                     .unnamed
                     .iter()
-                    .map(|f| type_to_typescript(&f.ty))
+                    .map(|f| type_to_typedef(&f.ty))
                     .collect();
 
                 Ok(quote! {
-                    {
-                        let types = vec![#(#field_types),*];
-                        format!("[{}]", types.join(", "))
-                    }
+                    ferrotype::TypeDef::Tuple(vec![#(#field_exprs),*])
                 })
             }
         }
         syn::Fields::Unit => {
-            // Unit struct becomes null/void
-            Ok(quote! { "null".to_string() })
+            // Unit struct becomes null
+            Ok(quote! { ferrotype::TypeDef::Primitive(ferrotype::Primitive::Null) })
         }
     }
 }
 
-/// Convert a Rust type to its TypeScript representation.
-/// Uses TypeScriptType trait for types that implement it.
-fn type_to_typescript(ty: &Type) -> TokenStream2 {
-    quote! { <#ty as ferrotype::TypeScriptType>::typescript_type() }
+/// Convert a Rust type to its TypeScript TypeDef representation.
+/// Uses TypeScript trait for types that implement it.
+fn type_to_typedef(ty: &Type) -> TokenStream2 {
+    quote! { <#ty as ferrotype::TypeScript>::typescript() }
 }
 
 fn generate_impl(
     name: &Ident,
     name_str: &str,
     generics: &Generics,
-    typescript_type_expr: TokenStream2,
+    typedef_expr: TokenStream2,
 ) -> syn::Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    // Add TypeScriptType bounds to generic parameters
+    // Add TypeScript bounds to generic parameters
     let where_clause = if generics.params.is_empty() {
         where_clause.cloned()
     } else {
@@ -258,7 +279,7 @@ fn generate_impl(
             where_clause.cloned()
         } else {
             let bounds = type_params.iter().map(|p| {
-                quote! { #p: ferrotype::TypeScriptType }
+                quote! { #p: ferrotype::TypeScript }
             });
 
             if let Some(existing_where) = where_clause {
@@ -271,13 +292,12 @@ fn generate_impl(
     };
 
     Ok(quote! {
-        impl #impl_generics ferrotype::TypeScriptType for #name #ty_generics #where_clause {
-            fn typescript_type() -> String {
-                #typescript_type_expr
-            }
-
-            fn typescript_name() -> &'static str {
-                #name_str
+        impl #impl_generics ferrotype::TypeScript for #name #ty_generics #where_clause {
+            fn typescript() -> ferrotype::TypeDef {
+                ferrotype::TypeDef::Named {
+                    name: #name_str.to_string(),
+                    def: Box::new(#typedef_expr),
+                }
             }
         }
     })
