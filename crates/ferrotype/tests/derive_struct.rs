@@ -343,3 +343,68 @@ fn test_field_rename_overrides_rename_all() {
     // Should NOT contain the camelCase version of some_field
     assert!(!rendered.contains("someField:"));
 }
+
+// ============================================================================
+// SKIP ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+struct SkipFieldStruct {
+    id: String,
+    name: String,
+    #[ts(skip)]
+    internal_state: i32,
+    #[ts(skip)]
+    cache: Option<String>,
+    visible: bool,
+}
+
+#[test]
+fn test_skip_field() {
+    let td = SkipFieldStruct::typescript();
+    let rendered = inner_def(td).render();
+    // Should include non-skipped fields
+    assert!(rendered.contains("id: string"));
+    assert!(rendered.contains("name: string"));
+    assert!(rendered.contains("visible: boolean"));
+    // Should NOT include skipped fields
+    assert!(!rendered.contains("internal_state"));
+    assert!(!rendered.contains("cache"));
+}
+
+#[derive(TypeScript)]
+struct AllSkippedStruct {
+    #[ts(skip)]
+    hidden1: String,
+    #[ts(skip)]
+    hidden2: i32,
+}
+
+#[test]
+fn test_all_fields_skipped() {
+    let td = AllSkippedStruct::typescript();
+    let rendered = inner_def(td).render();
+    // Should be an empty object
+    assert_eq!(rendered, "{}");
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "camelCase")]
+struct SkipWithRenameAll {
+    user_id: String,
+    #[ts(skip)]
+    internal_id: i32,
+    user_name: String,
+}
+
+#[test]
+fn test_skip_with_rename_all() {
+    let td = SkipWithRenameAll::typescript();
+    let rendered = inner_def(td).render();
+    // rename_all should apply to non-skipped fields
+    assert!(rendered.contains("userId: string"));
+    assert!(rendered.contains("userName: string"));
+    // Skipped field should not appear
+    assert!(!rendered.contains("internalId"));
+    assert!(!rendered.contains("internal_id"));
+}

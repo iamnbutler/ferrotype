@@ -162,6 +162,8 @@ impl ContainerAttrs {
 struct FieldAttrs {
     /// Rename this specific field
     rename: Option<String>,
+    /// Skip this field in the generated TypeScript
+    skip: bool,
 }
 
 impl FieldAttrs {
@@ -177,6 +179,8 @@ impl FieldAttrs {
                 if meta.path.is_ident("rename") {
                     let value: syn::LitStr = meta.value()?.parse()?;
                     result.rename = Some(value.value());
+                } else if meta.path.is_ident("skip") {
+                    result.skip = true;
                 }
                 Ok(())
             })?;
@@ -375,6 +379,10 @@ fn generate_enum_typedef(
                     let mut field_exprs: Vec<TokenStream2> = Vec::new();
                     for f in fields.named.iter() {
                         let field_attrs = FieldAttrs::from_attrs(&f.attrs)?;
+                        // Skip fields marked with #[ts(skip)]
+                        if field_attrs.skip {
+                            continue;
+                        }
                         let original_name = f.ident.as_ref().unwrap().to_string();
                         let field_name = field_attrs.rename.clone().unwrap_or(original_name);
                         let field_type = &f.ty;
@@ -422,6 +430,10 @@ fn generate_struct_typedef(
             let mut field_exprs: Vec<TokenStream2> = Vec::new();
             for f in fields.named.iter() {
                 let field_attrs = FieldAttrs::from_attrs(&f.attrs)?;
+                // Skip fields marked with #[ts(skip)]
+                if field_attrs.skip {
+                    continue;
+                }
                 let original_name = f.ident.as_ref().unwrap().to_string();
                 let field_name = get_field_name(&original_name, &field_attrs, container_attrs);
                 let field_type = &f.ty;

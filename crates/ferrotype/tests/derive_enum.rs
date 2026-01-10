@@ -324,3 +324,28 @@ fn test_data_variant_rename() {
     assert!(rendered.contains(r#"type: "textMessage""#));
     assert!(rendered.contains(r#"type: "errorInfo""#));
 }
+
+// ============================================================================
+// SKIP ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+enum EnumWithSkippedField {
+    Error {
+        code: i32,
+        message: String,
+        #[ts(skip)]
+        internal_trace: String,
+    },
+}
+
+#[test]
+fn test_enum_variant_field_skip() {
+    let td = EnumWithSkippedField::typescript();
+    let rendered = inner_def(td).render();
+    // Should include non-skipped fields
+    assert!(rendered.contains("code: number"));
+    assert!(rendered.contains("message: string"));
+    // Should NOT include skipped field
+    assert!(!rendered.contains("internal_trace"));
+}
