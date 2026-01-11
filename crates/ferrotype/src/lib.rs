@@ -14,8 +14,32 @@
 //! - Extended for additional targets
 
 pub use ferro_type_derive::TypeScript;
+pub use linkme;
 
 use std::collections::HashMap;
+
+// ============================================================================
+// AUTO-REGISTRATION VIA DISTRIBUTED SLICE
+// ============================================================================
+
+/// Distributed slice for auto-registration of TypeScript types.
+///
+/// Types that derive `TypeScript` are automatically registered in this slice
+/// when the `auto_register` feature is enabled (default). This allows collecting
+/// all types without manual registration.
+///
+/// # Usage
+///
+/// ```ignore
+/// // Types are automatically registered when you derive TypeScript
+/// #[derive(TypeScript)]
+/// struct User { name: String }
+///
+/// // Collect all registered types
+/// let registry = TypeRegistry::from_distributed();
+/// ```
+#[linkme::distributed_slice]
+pub static TYPESCRIPT_TYPES: [fn() -> TypeDef];
 
 // ============================================================================
 // CORE TRAIT AND IR (TypeScript + TypeDef)
@@ -385,6 +409,56 @@ impl TypeRegistry {
     /// Creates a new empty registry.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Creates a registry populated with all auto-registered types.
+    ///
+    /// This collects all types that were registered via the `#[derive(TypeScript)]`
+    /// macro using the distributed slice mechanism.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use ferrotype::{TypeRegistry, TypeScript};
+    ///
+    /// #[derive(TypeScript)]
+    /// struct User { name: String, age: u32 }
+    ///
+    /// #[derive(TypeScript)]
+    /// struct Post { title: String, author: User }
+    ///
+    /// // Collect all types automatically - no manual registration needed!
+    /// let registry = TypeRegistry::from_distributed();
+    /// println!("{}", registry.render());
+    /// ```
+    pub fn from_distributed() -> Self {
+        let mut registry = Self::new();
+        for type_fn in TYPESCRIPT_TYPES {
+            let typedef = type_fn();
+            registry.add_typedef(typedef);
+        }
+        registry
+    }
+
+    /// Collects all auto-registered types into this registry.
+    ///
+    /// This is useful when you want to add auto-registered types to an existing
+    /// registry that may already have some manually registered types.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut registry = TypeRegistry::new();
+    /// // Add some manual types first
+    /// registry.register::<SomeManualType>();
+    /// // Then collect all auto-registered types
+    /// registry.collect_all();
+    /// ```
+    pub fn collect_all(&mut self) {
+        for type_fn in TYPESCRIPT_TYPES {
+            let typedef = type_fn();
+            self.add_typedef(typedef);
+        }
     }
 
     /// Registers a type that implements TypeScript.
@@ -1310,5 +1384,70 @@ mod tests {
 
         assert!(c_pos < b_pos, "C should come before B");
         assert!(b_pos < a_pos, "B should come before A");
+    }
+
+    // ========================================================================
+    // AUTO-REGISTRATION TESTS
+    // ========================================================================
+
+    // Test types for auto-registration
+    #[derive(Debug)]
+    struct AutoRegTestUser {
+        name: String,
+        age: u32,
+    }
+
+    impl TypeScript for AutoRegTestUser {
+        fn typescript() -> TypeDef {
+            TypeDef::Named {
+                name: "AutoRegTestUser".to_string(),
+                def: Box::new(TypeDef::Object(vec![
+                    Field::new("name", TypeDef::Primitive(Primitive::String)),
+                    Field::new("age", TypeDef::Primitive(Primitive::Number)),
+                ])),
+            }
+        }
+    }
+
+    // Register manually for this test (the derive macro does this automatically)
+    #[linkme::distributed_slice(TYPESCRIPT_TYPES)]
+    static __TEST_REGISTER_USER: fn() -> TypeDef = || AutoRegTestUser::typescript();
+
+    #[test]
+    fn test_from_distributed_collects_types() {
+        let registry = TypeRegistry::from_distributed();
+
+        // The registry should contain our test type
+        assert!(registry.get("AutoRegTestUser").is_some(),
+            "Registry should contain AutoRegTestUser");
+    }
+
+    #[test]
+    fn test_collect_all_adds_to_existing() {
+        let mut registry = TypeRegistry::new();
+
+        // Add a manual type first
+        let manual_type = TypeDef::Named {
+            name: "ManualType".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        };
+        registry.add_typedef(manual_type);
+
+        // Then collect all auto-registered types
+        registry.collect_all();
+
+        // Should have both the manual type and auto-registered types
+        assert!(registry.get("ManualType").is_some(),
+            "Registry should contain ManualType");
+        assert!(registry.get("AutoRegTestUser").is_some(),
+            "Registry should contain AutoRegTestUser from distributed slice");
+    }
+
+    #[test]
+    fn test_distributed_slice_is_accessible() {
+        // Verify the distributed slice can be iterated
+        let count = TYPESCRIPT_TYPES.len();
+        // At minimum, we have our test type registered
+        assert!(count >= 1, "TYPESCRIPT_TYPES should have at least 1 entry");
     }
 }

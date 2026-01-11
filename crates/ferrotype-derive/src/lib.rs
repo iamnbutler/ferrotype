@@ -780,6 +780,22 @@ fn generate_impl(
         }
     };
 
+    // Generate auto-registration code only for non-generic types
+    // Generic types can't be auto-registered because we need concrete type parameters
+    let registration = if generics.params.is_empty() {
+        let register_name = syn::Ident::new(
+            &format!("__FERRO_TYPE_REGISTER_{}", name.to_string().to_uppercase()),
+            name.span(),
+        );
+        quote! {
+            #[ferro_type::linkme::distributed_slice(ferro_type::TYPESCRIPT_TYPES)]
+            #[linkme(crate = ferro_type::linkme)]
+            static #register_name: fn() -> ferro_type::TypeDef = || <#name as ferro_type::TypeScript>::typescript();
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         impl #impl_generics ferro_type::TypeScript for #name #ty_generics #where_clause {
             fn typescript() -> ferro_type::TypeDef {
@@ -789,5 +805,7 @@ fn generate_impl(
                 }
             }
         }
+
+        #registration
     })
 }

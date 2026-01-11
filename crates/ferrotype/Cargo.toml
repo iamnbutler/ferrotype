@@ -12,6 +12,7 @@ categories = ["development-tools", "encoding"]
 
 [dependencies]
 ferro-type-derive = { version = "0.1.0", path = "../ferrotype-derive" }
+linkme = "0.3"
 
 [dev-dependencies]
 insta = "1.41"

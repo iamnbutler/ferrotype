@@ -1,6 +1,6 @@
 //! Tests for #[derive(TypeScript)] on structs
 
-use ferro_type::{TypeScript, TypeDef};
+use ferro_type::{TypeScript, TypeDef, TypeRegistry};
 
 /// Helper to get the inner definition from a Named TypeDef
 fn inner_def(td: TypeDef) -> TypeDef {
@@ -623,4 +623,43 @@ fn test_inline_simple_type() {
     let rendered = inner_def(td).render();
     assert!(rendered.contains("nested: { value: number }"));
     assert!(rendered.contains("other: string"));
+}
+
+// ============================================================================
+// AUTO-REGISTRATION TESTS
+// ============================================================================
+
+#[test]
+fn test_auto_registration_with_derived_types() {
+    // Use TypeRegistry::from_distributed() to collect all auto-registered types
+    let registry = TypeRegistry::from_distributed();
+
+    // Non-generic derived types should be auto-registered
+    // SimpleUser is defined at the top of this file without generics
+    assert!(
+        registry.get("SimpleUser").is_some(),
+        "SimpleUser should be auto-registered"
+    );
+
+    // UnitStruct is also non-generic
+    assert!(
+        registry.get("UnitStruct").is_some(),
+        "UnitStruct should be auto-registered"
+    );
+}
+
+#[test]
+fn test_generic_types_not_auto_registered() {
+    // Generic types cannot be auto-registered because they need concrete type parameters
+    let registry = TypeRegistry::from_distributed();
+
+    // Container<T> and Pair<A, B> are generic and should NOT be auto-registered
+    assert!(
+        registry.get("Container").is_none(),
+        "Generic Container should not be auto-registered"
+    );
+    assert!(
+        registry.get("Pair").is_none(),
+        "Generic Pair should not be auto-registered"
+    );
 }
