@@ -802,6 +802,7 @@ fn generate_impl(
                 ferro_type::TypeDef::Named {
                     name: #name_str.to_string(),
                     def: Box::new(#typedef_expr),
+                    module: Some(module_path!().to_string()),
                 }
             }
         }

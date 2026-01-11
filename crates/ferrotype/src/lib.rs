@@ -123,6 +123,8 @@ pub enum TypeDef {
     Named {
         name: String,
         def: Box<TypeDef>,
+        /// Optional module path for multi-file export (e.g., "models::user")
+        module: Option<String>,
     },
 
     /// A reference to a named type. Used to avoid infinite recursion and
@@ -292,7 +294,7 @@ impl TypeDef {
     /// For other types, this just returns the rendered type.
     pub fn render_declaration(&self) -> String {
         match self {
-            TypeDef::Named { name, def } => {
+            TypeDef::Named { name, def, .. } => {
                 format!("type {} = {};", name, def.render())
             }
             _ => self.render(),
@@ -478,7 +480,7 @@ impl TypeRegistry {
     /// Recursively extracts all Named types from a TypeDef.
     fn extract_named_types(&mut self, typedef: &TypeDef) {
         match typedef {
-            TypeDef::Named { name, def } => {
+            TypeDef::Named { name, def, .. } => {
                 if !self.types.contains_key(name) {
                     self.types.insert(name.clone(), typedef.clone());
                     self.registration_order.push(name.clone());
@@ -708,7 +710,7 @@ impl TypeRegistry {
 
         for name in sorted {
             if let Some(typedef) = self.types.get(name) {
-                if let TypeDef::Named { name, def } = typedef {
+                if let TypeDef::Named { name, def, .. } = typedef {
                     output.push_str(&format!("export type {} = {};\n\n", name, def.render()));
                 }
             }
@@ -1030,6 +1032,7 @@ mod tests {
         let named = TypeDef::Named {
             name: "UserId".into(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         };
         // Named types render as just their name (for inline use)
         assert_eq!(named.render(), "UserId");
@@ -1185,6 +1188,7 @@ mod tests {
                 Field::new("id", TypeDef::Primitive(Primitive::String)),
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
+            module: None,
         };
 
         registry.add_typedef(user_type);
@@ -1200,6 +1204,7 @@ mod tests {
         let user_type = TypeDef::Named {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         };
 
         registry.add_typedef(user_type.clone());
@@ -1217,6 +1222,7 @@ mod tests {
         let user_id = TypeDef::Named {
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         };
 
         // User type depends on UserId via Ref
@@ -1226,6 +1232,7 @@ mod tests {
                 Field::new("id", TypeDef::Ref("UserId".to_string())),
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
+            module: None,
         };
 
         // Post type that references User type
@@ -1235,6 +1242,7 @@ mod tests {
                 Field::new("title", TypeDef::Primitive(Primitive::String)),
                 Field::new("author", user),
             ])),
+            module: None,
         };
 
         registry.add_typedef(post_type);
@@ -1257,6 +1265,7 @@ mod tests {
                 Field::new("id", TypeDef::Primitive(Primitive::String)),
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
+            module: None,
         };
 
         registry.add_typedef(user_type);
@@ -1273,6 +1282,7 @@ mod tests {
         let user_type = TypeDef::Named {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         };
 
         registry.add_typedef(user_type);
@@ -1289,6 +1299,7 @@ mod tests {
         let user_id = TypeDef::Named {
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         };
 
         // User type depends on UserId via Ref
@@ -1298,6 +1309,7 @@ mod tests {
                 Field::new("id", TypeDef::Ref("UserId".to_string())),
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
+            module: None,
         };
 
         // Add in reverse order (User before UserId)
@@ -1319,6 +1331,7 @@ mod tests {
         let user_type = TypeDef::Named {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         };
 
         registry.add_typedef(user_type);
@@ -1335,10 +1348,12 @@ mod tests {
         registry.add_typedef(TypeDef::Named {
             name: "Alpha".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         });
         registry.add_typedef(TypeDef::Named {
             name: "Beta".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
+            module: None,
         });
 
         let names: Vec<_> = registry.type_names().collect();
@@ -1355,6 +1370,7 @@ mod tests {
         let c = TypeDef::Named {
             name: "C".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         };
 
         let b = TypeDef::Named {
@@ -1362,6 +1378,7 @@ mod tests {
             def: Box::new(TypeDef::Object(vec![
                 Field::new("c", TypeDef::Ref("C".to_string())),
             ])),
+            module: None,
         };
 
         let a = TypeDef::Named {
@@ -1369,6 +1386,7 @@ mod tests {
             def: Box::new(TypeDef::Object(vec![
                 Field::new("b", TypeDef::Ref("B".to_string())),
             ])),
+            module: None,
         };
 
         // Add in wrong order
@@ -1405,6 +1423,7 @@ mod tests {
                     Field::new("name", TypeDef::Primitive(Primitive::String)),
                     Field::new("age", TypeDef::Primitive(Primitive::Number)),
                 ])),
+                module: None,
             }
         }
     }
@@ -1430,6 +1449,7 @@ mod tests {
         let manual_type = TypeDef::Named {
             name: "ManualType".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
         };
         registry.add_typedef(manual_type);
 

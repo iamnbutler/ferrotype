@@ -28,6 +28,7 @@ impl TypeScript for Point {
                 Field::new("x", TypeDef::Primitive(Primitive::Number)),
                 Field::new("y", TypeDef::Primitive(Primitive::Number)),
             ])),
+            module: None,
         }
     }
 }
@@ -51,6 +52,7 @@ impl TypeScript for User {
                 Field::new("email", TypeDef::Primitive(Primitive::String)),
                 Field::new("active", TypeDef::Primitive(Primitive::Boolean)),
             ])),
+            module: None,
         }
     }
 }
@@ -83,6 +85,7 @@ impl TypeScript for Profile {
                     TypeDef::Primitive(Primitive::Null),
                 ])),
             ])),
+            module: None,
         }
     }
 }
@@ -100,6 +103,7 @@ impl TypeScript for Rgb {
                 TypeDef::Primitive(Primitive::Number),
                 TypeDef::Primitive(Primitive::Number),
             ])),
+            module: None,
         }
     }
 }
@@ -113,6 +117,7 @@ impl TypeScript for Ping {
         TypeDef::Named {
             name: "Ping".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Null)),
+            module: None,
         }
     }
 }
@@ -126,6 +131,7 @@ impl TypeScript for UserId {
         TypeDef::Named {
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
+            module: None,
         }
     }
 }
@@ -145,6 +151,7 @@ impl TypeScript for Rectangle {
                 Field::new("top_left", TypeDef::Ref("Point".to_string())),
                 Field::new("bottom_right", TypeDef::Ref("Point".to_string())),
             ])),
+            module: None,
         }
     }
 }
@@ -162,6 +169,7 @@ impl TypeScript for Polygon {
             def: Box::new(TypeDef::Object(vec![
                 Field::new("vertices", TypeDef::Array(Box::new(TypeDef::Ref("Point".to_string())))),
             ])),
+            module: None,
         }
     }
 }
@@ -182,6 +190,7 @@ impl TypeScript for Config {
                     value: Box::new(TypeDef::Primitive(Primitive::String)),
                 }),
             ])),
+            module: None,
         }
     }
 }
@@ -209,6 +218,7 @@ impl TypeScript for Status {
                 TypeDef::Literal(ferro_type::Literal::String("Completed".to_string())),
                 TypeDef::Literal(ferro_type::Literal::String("Failed".to_string())),
             ])),
+            module: None,
         }
     }
 }
@@ -241,6 +251,7 @@ impl TypeScript for Coordinate {
                     ])),
                 ]),
             ])),
+            module: None,
         }
     }
 }
@@ -284,6 +295,7 @@ impl TypeScript for Message {
                     Field::new("message", TypeDef::Primitive(Primitive::String)),
                 ]),
             ])),
+            module: None,
         }
     }
 }
@@ -312,6 +324,7 @@ impl TypeScript for GetUserRequest {
             def: Box::new(TypeDef::Object(vec![
                 Field::new("user_id", TypeDef::Primitive(Primitive::Number)),
             ])),
+            module: None,
         }
     }
 }
@@ -332,6 +345,7 @@ impl TypeScript for GetUserResponse {
                     TypeDef::Primitive(Primitive::Null),
                 ])),
             ])),
+            module: None,
         }
     }
 }
@@ -356,6 +370,7 @@ impl TypeScript for ListUsersRequest {
                     TypeDef::Primitive(Primitive::Null),
                 ])),
             ])),
+            module: None,
         }
     }
 }
@@ -379,6 +394,7 @@ impl TypeScript for ListUsersResponse {
                 Field::new("page", TypeDef::Primitive(Primitive::Number)),
                 Field::new("per_page", TypeDef::Primitive(Primitive::Number)),
             ])),
+            module: None,
         }
     }
 }
@@ -402,6 +418,7 @@ impl TypeScript for ApiError {
                 Field::new("code", TypeDef::Primitive(Primitive::String)),
                 Field::new("message", TypeDef::Primitive(Primitive::String)),
             ])),
+            module: None,
         }
     }
 }
@@ -431,6 +448,7 @@ impl TypeScript for DetailedError {
                     TypeDef::Primitive(Primitive::Null),
                 ])),
             ])),
+            module: None,
         }
     }
 }
@@ -470,6 +488,7 @@ impl TypeScript for RpcError {
                     Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Internal".to_string()))),
                 ]),
             ])),
+            module: None,
         }
     }
 }
