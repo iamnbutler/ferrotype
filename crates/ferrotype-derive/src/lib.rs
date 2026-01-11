@@ -209,6 +209,8 @@ struct FieldAttrs {
     index: Option<String>,
     /// Key for indexed access (e.g., "login" in Profile["login"])
     key: Option<String>,
+    /// Template literal pattern for this field (e.g., "${TOPIC}::${ULID}")
+    pattern: Option<String>,
 }
 
 impl FieldAttrs {
@@ -241,6 +243,9 @@ impl FieldAttrs {
                 } else if meta.path.is_ident("key") {
                     let value: syn::LitStr = meta.value()?.parse()?;
                     result.key = Some(value.value());
+                } else if meta.path.is_ident("pattern") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.pattern = Some(value.value());
                 }
                 Ok(())
             })?;
@@ -252,6 +257,11 @@ impl FieldAttrs {
     /// Returns true if this field uses indexed access type
     fn has_indexed_access(&self) -> bool {
         self.index.is_some() && self.key.is_some()
+    }
+
+    /// Returns true if this field uses a template literal pattern
+    fn has_pattern(&self) -> bool {
+        self.pattern.is_some()
     }
 }
 
@@ -774,6 +784,11 @@ fn generate_struct_typedef(
                                 key: #index_key.to_string(),
                             }
                         }
+                    } else if field_attrs.has_pattern() {
+                        // Use template literal pattern
+                        let pattern = field_attrs.pattern.as_ref().unwrap();
+                        let (strings, types) = parse_template_pattern(pattern)?;
+                        generate_template_literal_expr(&strings, &types)
                     } else {
                         let base_expr = type_to_typedef(field_type);
                         if field_attrs.inline {
