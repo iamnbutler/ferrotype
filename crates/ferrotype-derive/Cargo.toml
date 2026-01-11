@@ -4,6 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 description = "Derive macros for ferrotype TypeScript type generation"
+repository = "https://github.com/iamnbutler/ferrotype"
+documentation = "https://docs.rs/ferrotype-derive"
+keywords = ["typescript", "codegen", "derive", "serde"]
+categories = ["development-tools", "encoding"]
 
 [lib]
 proc-macro = true

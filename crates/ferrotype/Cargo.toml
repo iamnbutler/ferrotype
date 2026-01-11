@@ -3,10 +3,15 @@ name = "ferrotype"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Rust-to-TypeScript type mapping for Zed RPC"
+description = "Rust-to-TypeScript type code generation with serde compatibility"
+repository = "https://github.com/iamnbutler/ferrotype"
+documentation = "https://docs.rs/ferrotype"
+readme = "../../README.md"
+keywords = ["typescript", "codegen", "derive", "serde"]
+categories = ["development-tools", "encoding"]
 
 [dependencies]
-ferrotype-derive = { path = "../ferrotype-derive" }
+ferrotype-derive = { version = "0.1.0", path = "../ferrotype-derive" }
 
 [dev-dependencies]
 insta = "1.41"
