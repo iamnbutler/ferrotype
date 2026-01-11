@@ -1,6 +1,6 @@
 [package]
 name = "ferro-type-derive"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 description = "Derive macros for ferrotype TypeScript type generation"
