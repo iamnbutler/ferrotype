@@ -69,6 +69,7 @@ pub static TYPESCRIPT_TYPES: [fn() -> TypeDef];
 /// impl TypeScript for UserId {
 ///     fn typescript() -> TypeDef {
 ///         TypeDef::Named {
+///             namespace: vec![],
 ///             name: "UserId".into(),
 ///             def: Box::new(TypeDef::Primitive(Primitive::String)),
 ///         }
@@ -120,8 +121,16 @@ pub enum TypeDef {
 
     /// A named type definition that should be emitted as a separate declaration.
     /// This is the primary mechanism for type deduplication.
+    ///
+    /// The optional `namespace` field allows placing types in TypeScript namespaces:
+    /// - `namespace: vec![]` → `type State = ...`
+    /// - `namespace: vec!["VM".into(), "Git".into()]` → `namespace VM { namespace Git { type State = ... } }`
     Named {
+        /// Optional namespace path, e.g., ["VM", "Git"] for `namespace VM { namespace Git { ... } }`
+        namespace: Vec<String>,
+        /// The type name
         name: String,
+        /// The type definition
         def: Box<TypeDef>,
     },
 
@@ -266,7 +275,13 @@ impl TypeDef {
             TypeDef::Record { key, value } => {
                 format!("Record<{}, {}>", key.render(), value.render())
             }
-            TypeDef::Named { name, .. } => name.clone(),
+            TypeDef::Named { namespace, name, .. } => {
+                if namespace.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{}.{}", namespace.join("."), name)
+                }
+            }
             TypeDef::Ref(name) => name.clone(),
             TypeDef::Literal(lit) => lit.render(),
             TypeDef::Function {
@@ -289,14 +304,66 @@ impl TypeDef {
     /// Renders a full type declaration for named types.
     ///
     /// For `Named` types, this returns `type Name = Definition;`
+    /// If the type has a namespace, it wraps in `namespace X { ... }`.
     /// For other types, this just returns the rendered type.
     pub fn render_declaration(&self) -> String {
         match self {
-            TypeDef::Named { name, def } => {
-                format!("type {} = {};", name, def.render())
+            TypeDef::Named { namespace, name, def } => {
+                let inner = format!("type {} = {};", name, def.render());
+                Self::wrap_in_namespace(namespace, &inner)
             }
             _ => self.render(),
         }
+    }
+
+    /// Wraps a declaration in namespace blocks.
+    ///
+    /// For namespace `["VM", "Git"]` and inner `type State = "clean";`:
+    /// ```typescript
+    /// namespace VM {
+    ///     namespace Git {
+    ///         type State = "clean";
+    ///     }
+    /// }
+    /// ```
+    fn wrap_in_namespace(namespace: &[String], inner: &str) -> String {
+        if namespace.is_empty() {
+            return inner.to_string();
+        }
+
+        let mut result = String::new();
+        let indent = "    ";
+
+        // Opening namespace declarations
+        for (i, ns) in namespace.iter().enumerate() {
+            for _ in 0..i {
+                result.push_str(indent);
+            }
+            result.push_str("namespace ");
+            result.push_str(ns);
+            result.push_str(" {\n");
+        }
+
+        // Inner content with proper indentation
+        let depth = namespace.len();
+        for _ in 0..depth {
+            result.push_str(indent);
+        }
+        result.push_str(inner);
+        result.push('\n');
+
+        // Closing braces
+        for i in (0..depth).rev() {
+            for _ in 0..i {
+                result.push_str(indent);
+            }
+            result.push('}');
+            if i > 0 {
+                result.push('\n');
+            }
+        }
+
+        result
     }
 }
 
@@ -478,10 +545,17 @@ impl TypeRegistry {
     /// Recursively extracts all Named types from a TypeDef.
     fn extract_named_types(&mut self, typedef: &TypeDef) {
         match typedef {
-            TypeDef::Named { name, def } => {
-                if !self.types.contains_key(name) {
-                    self.types.insert(name.clone(), typedef.clone());
-                    self.registration_order.push(name.clone());
+            TypeDef::Named { namespace, name, def } => {
+                // Use fully qualified name as the key (e.g., "VM.Git.State")
+                let qualified_name = if namespace.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{}.{}", namespace.join("."), name)
+                };
+
+                if !self.types.contains_key(&qualified_name) {
+                    self.types.insert(qualified_name.clone(), typedef.clone());
+                    self.registration_order.push(qualified_name);
                     // Also extract from the inner definition
                     self.extract_named_types(def);
                 }
@@ -698,6 +772,8 @@ impl TypeRegistry {
     }
 
     /// Renders all registered types with `export` keywords.
+    ///
+    /// For namespaced types, exports the namespace declaration.
     pub fn render_exported(&self) -> String {
         let sorted = self.sorted_types();
         let mut output = String::new();
@@ -708,14 +784,62 @@ impl TypeRegistry {
 
         for name in sorted {
             if let Some(typedef) = self.types.get(name) {
-                if let TypeDef::Named { name, def } = typedef {
-                    output.push_str(&format!("export type {} = {};\n\n", name, def.render()));
+                if let TypeDef::Named { namespace, name, def } = typedef {
+                    let inner = format!("export type {} = {};", name, def.render());
+                    if namespace.is_empty() {
+                        output.push_str(&inner);
+                    } else {
+                        // For namespaced types, wrap in export namespace
+                        output.push_str(&Self::wrap_in_export_namespace(namespace, &inner));
+                    }
+                    output.push_str("\n\n");
                 }
             }
         }
 
         // Remove trailing newline
         output.trim_end().to_string() + "\n"
+    }
+
+    /// Wraps a declaration in export namespace blocks.
+    fn wrap_in_export_namespace(namespace: &[String], inner: &str) -> String {
+        if namespace.is_empty() {
+            return inner.to_string();
+        }
+
+        let mut result = String::new();
+        let indent = "    ";
+
+        // Opening export namespace declarations
+        for (i, ns) in namespace.iter().enumerate() {
+            for _ in 0..i {
+                result.push_str(indent);
+            }
+            result.push_str("export namespace ");
+            result.push_str(ns);
+            result.push_str(" {\n");
+        }
+
+        // Inner content with proper indentation
+        let depth = namespace.len();
+        for _ in 0..depth {
+            result.push_str(indent);
+        }
+        result.push_str(inner);
+        result.push('\n');
+
+        // Closing braces
+        for i in (0..depth).rev() {
+            for _ in 0..i {
+                result.push_str(indent);
+            }
+            result.push('}');
+            if i > 0 {
+                result.push('\n');
+            }
+        }
+
+        result
     }
 
     /// Clears all registered types.
@@ -1028,6 +1152,7 @@ mod tests {
     #[test]
     fn test_typedef_named_render() {
         let named = TypeDef::Named {
+            namespace: vec![],
             name: "UserId".into(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         };
@@ -1035,6 +1160,40 @@ mod tests {
         assert_eq!(named.render(), "UserId");
         // Full declaration uses render_declaration
         assert_eq!(named.render_declaration(), "type UserId = string;");
+    }
+
+    #[test]
+    fn test_typedef_namespaced_render() {
+        // VM.Git.State pattern
+        let namespaced = TypeDef::Named {
+            namespace: vec!["VM".into(), "Git".into()],
+            name: "State".into(),
+            def: Box::new(TypeDef::Union(vec![
+                TypeDef::Literal(Literal::String("clean".into())),
+                TypeDef::Literal(Literal::String("dirty".into())),
+                TypeDef::Literal(Literal::String("unknown".into())),
+            ])),
+        };
+        // Inline reference includes namespace path
+        assert_eq!(namespaced.render(), "VM.Git.State");
+        // Declaration wraps in namespace blocks
+        let decl = namespaced.render_declaration();
+        assert!(decl.contains("namespace VM {"));
+        assert!(decl.contains("namespace Git {"));
+        assert!(decl.contains(r#"type State = "clean" | "dirty" | "unknown";"#));
+    }
+
+    #[test]
+    fn test_typedef_single_namespace_render() {
+        let namespaced = TypeDef::Named {
+            namespace: vec!["API".into()],
+            name: "Response".into(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        };
+        assert_eq!(namespaced.render(), "API.Response");
+        let decl = namespaced.render_declaration();
+        assert!(decl.contains("namespace API {"));
+        assert!(decl.contains("type Response = string;"));
     }
 
     #[test]
@@ -1180,6 +1339,7 @@ mod tests {
         let mut registry = TypeRegistry::new();
 
         let user_type = TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("id", TypeDef::Primitive(Primitive::String)),
@@ -1198,6 +1358,7 @@ mod tests {
         let mut registry = TypeRegistry::new();
 
         let user_type = TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         };
@@ -1215,12 +1376,14 @@ mod tests {
 
         // UserId type (no dependencies)
         let user_id = TypeDef::Named {
+            namespace: vec![],
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         };
 
         // User type depends on UserId via Ref
         let user = TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("id", TypeDef::Ref("UserId".to_string())),
@@ -1230,6 +1393,7 @@ mod tests {
 
         // Post type that references User type
         let post_type = TypeDef::Named {
+            namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("title", TypeDef::Primitive(Primitive::String)),
@@ -1252,6 +1416,7 @@ mod tests {
         let mut registry = TypeRegistry::new();
 
         let user_type = TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("id", TypeDef::Primitive(Primitive::String)),
@@ -1271,6 +1436,7 @@ mod tests {
         let mut registry = TypeRegistry::new();
 
         let user_type = TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         };
@@ -1287,12 +1453,14 @@ mod tests {
 
         // UserId type (no dependencies)
         let user_id = TypeDef::Named {
+            namespace: vec![],
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         };
 
         // User type depends on UserId via Ref
         let user = TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("id", TypeDef::Ref("UserId".to_string())),
@@ -1317,6 +1485,7 @@ mod tests {
         let mut registry = TypeRegistry::new();
 
         let user_type = TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         };
@@ -1333,10 +1502,12 @@ mod tests {
         let mut registry = TypeRegistry::new();
 
         registry.add_typedef(TypeDef::Named {
+            namespace: vec![],
             name: "Alpha".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         });
         registry.add_typedef(TypeDef::Named {
+            namespace: vec![],
             name: "Beta".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
         });
@@ -1353,11 +1524,13 @@ mod tests {
 
         // A -> B -> C (C should come first)
         let c = TypeDef::Named {
+            namespace: vec![],
             name: "C".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         };
 
         let b = TypeDef::Named {
+            namespace: vec![],
             name: "B".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("c", TypeDef::Ref("C".to_string())),
@@ -1365,6 +1538,7 @@ mod tests {
         };
 
         let a = TypeDef::Named {
+            namespace: vec![],
             name: "A".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("b", TypeDef::Ref("B".to_string())),
@@ -1400,6 +1574,7 @@ mod tests {
     impl TypeScript for AutoRegTestUser {
         fn typescript() -> TypeDef {
             TypeDef::Named {
+                namespace: vec![],
                 name: "AutoRegTestUser".to_string(),
                 def: Box::new(TypeDef::Object(vec![
                     Field::new("name", TypeDef::Primitive(Primitive::String)),
@@ -1428,6 +1603,7 @@ mod tests {
 
         // Add a manual type first
         let manual_type = TypeDef::Named {
+            namespace: vec![],
             name: "ManualType".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
         };

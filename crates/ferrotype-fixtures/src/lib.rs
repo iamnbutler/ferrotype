@@ -23,6 +23,7 @@ pub struct Point {
 impl TypeScript for Point {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Point".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("x", TypeDef::Primitive(Primitive::Number)),
@@ -44,6 +45,7 @@ pub struct User {
 impl TypeScript for User {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("id", TypeDef::Primitive(Primitive::Number)),
@@ -67,6 +69,7 @@ pub struct Profile {
 impl TypeScript for Profile {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Profile".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("username", TypeDef::Primitive(Primitive::String)),
@@ -94,6 +97,7 @@ pub struct Rgb(pub u8, pub u8, pub u8);
 impl TypeScript for Rgb {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Rgb".to_string(),
             def: Box::new(TypeDef::Tuple(vec![
                 TypeDef::Primitive(Primitive::Number),
@@ -111,6 +115,7 @@ pub struct Ping;
 impl TypeScript for Ping {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Ping".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Null)),
         }
@@ -124,6 +129,7 @@ pub struct UserId(pub u64);
 impl TypeScript for UserId {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
         }
@@ -140,6 +146,7 @@ pub struct Rectangle {
 impl TypeScript for Rectangle {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Rectangle".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("top_left", TypeDef::Ref("Point".to_string())),
@@ -158,6 +165,7 @@ pub struct Polygon {
 impl TypeScript for Polygon {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Polygon".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("vertices", TypeDef::Array(Box::new(TypeDef::Ref("Point".to_string())))),
@@ -175,6 +183,7 @@ pub struct Config {
 impl TypeScript for Config {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Config".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("settings", TypeDef::Record {
@@ -202,6 +211,7 @@ pub enum Status {
 impl TypeScript for Status {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Status".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Literal(ferro_type::Literal::String("Pending".to_string())),
@@ -223,6 +233,7 @@ pub enum Coordinate {
 impl TypeScript for Coordinate {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Coordinate".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Object(vec![
@@ -265,6 +276,7 @@ pub enum Message {
 impl TypeScript for Message {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "Message".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Object(vec![
@@ -308,6 +320,7 @@ pub struct GetUserRequest {
 impl TypeScript for GetUserRequest {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "GetUserRequest".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("user_id", TypeDef::Primitive(Primitive::Number)),
@@ -325,6 +338,7 @@ pub struct GetUserResponse {
 impl TypeScript for GetUserResponse {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "GetUserResponse".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("user", TypeDef::Union(vec![
@@ -347,6 +361,7 @@ pub struct ListUsersRequest {
 impl TypeScript for ListUsersRequest {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "ListUsersRequest".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("page", TypeDef::Primitive(Primitive::Number)),
@@ -372,6 +387,7 @@ pub struct ListUsersResponse {
 impl TypeScript for ListUsersResponse {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "ListUsersResponse".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("users", TypeDef::Array(Box::new(TypeDef::Ref("User".to_string())))),
@@ -397,6 +413,7 @@ pub struct ApiError {
 impl TypeScript for ApiError {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "ApiError".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("code", TypeDef::Primitive(Primitive::String)),
@@ -418,6 +435,7 @@ pub struct DetailedError {
 impl TypeScript for DetailedError {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "DetailedError".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("code", TypeDef::Primitive(Primitive::String)),
@@ -448,6 +466,7 @@ pub enum RpcError {
 impl TypeScript for RpcError {
     fn typescript() -> TypeDef {
         TypeDef::Named {
+            namespace: vec![],
             name: "RpcError".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Object(vec![

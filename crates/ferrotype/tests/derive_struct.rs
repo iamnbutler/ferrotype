@@ -663,3 +663,83 @@ fn test_generic_types_not_auto_registered() {
         "Generic Pair should not be auto-registered"
     );
 }
+
+// ============================================================================
+// NAMESPACE ATTRIBUTE TESTS
+// ============================================================================
+
+/// Test struct in a namespace - VM.Git.State pattern
+#[derive(TypeScript)]
+#[ts(namespace = "VM::Git")]
+enum GitState {
+    Clean,
+    Dirty,
+    Unknown,
+}
+
+#[test]
+fn test_namespace_attribute_enum() {
+    let td = GitState::typescript();
+    // Render should include namespace path
+    assert_eq!(td.render(), "VM.Git.GitState");
+    // Declaration should wrap in namespaces
+    let decl = td.render_declaration();
+    assert!(decl.contains("namespace VM {"));
+    assert!(decl.contains("namespace Git {"));
+    assert!(decl.contains("type GitState ="));
+}
+
+#[derive(TypeScript)]
+#[ts(namespace = "API.Models")]
+struct NamespacedConfig {
+    remote: String,
+    branch: String,
+}
+
+#[test]
+fn test_namespace_attribute_struct() {
+    let td = NamespacedConfig::typescript();
+    // Render should include namespace path
+    assert_eq!(td.render(), "API.Models.NamespacedConfig");
+    // Declaration should wrap in namespaces
+    let decl = td.render_declaration();
+    assert!(decl.contains("namespace API {"));
+    assert!(decl.contains("namespace Models {"));
+    assert!(decl.contains("type NamespacedConfig ="));
+}
+
+#[derive(TypeScript)]
+#[ts(namespace = "Util")]
+struct SingleNamespaceType {
+    value: i32,
+}
+
+#[test]
+fn test_single_namespace() {
+    let td = SingleNamespaceType::typescript();
+    assert_eq!(td.render(), "Util.SingleNamespaceType");
+    let decl = td.render_declaration();
+    assert!(decl.contains("namespace Util {"));
+    assert!(decl.contains("type SingleNamespaceType ="));
+}
+
+#[test]
+fn test_namespaced_type_in_registry() {
+    let mut registry = TypeRegistry::new();
+    registry.register::<GitState>();
+
+    // The qualified name should be used as the key
+    assert!(
+        registry.get("VM.Git.GitState").is_some(),
+        "Namespaced type should use qualified name as key"
+    );
+    assert!(
+        registry.get("GitState").is_none(),
+        "Short name should not be a separate entry"
+    );
+
+    // Render should produce valid namespace output
+    let output = registry.render();
+    assert!(output.contains("namespace VM {"));
+    assert!(output.contains("namespace Git {"));
+}
