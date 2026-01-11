@@ -1,6 +1,6 @@
 ---
 source: crates/ferrotype/tests/codegen_snapshots.rs
 assertion_line: 108
-expression: "<Vec<Option<i32>>>::typescript_type()"
+expression: "<Vec<Option<i32>>>::typescript().render()"
 ---
-number | null[]
+(number | null)[]

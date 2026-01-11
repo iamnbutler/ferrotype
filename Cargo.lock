@@ -219,20 +219,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrotype-test-server"
-version = "0.1.0"
-dependencies = [
- "axum",
- "ferrotype",
- "ferrotype-fixtures",
- "serde",
- "serde_json",
- "tokio",
- "tower",
- "tower-http 0.5.2",
-]
-
-[[package]]
 name = "find-msvc-tools"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

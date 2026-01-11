@@ -9,7 +9,7 @@
 //! Test with: curl http://localhost:3000/rpc/hello
 
 use axum::{routing::get, Json, Router};
-use ferrotype::TypeScriptType;
+use ferrotype::{Field, Primitive, TypeDef, TypeScript};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
@@ -20,13 +20,14 @@ pub struct HelloResponse {
     pub message: String,
 }
 
-impl TypeScriptType for HelloResponse {
-    fn typescript_type() -> String {
-        "{ message: string }".to_string()
-    }
-
-    fn typescript_name() -> &'static str {
-        "HelloResponse"
+impl TypeScript for HelloResponse {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "HelloResponse".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("message", TypeDef::Primitive(Primitive::String)),
+            ])),
+        }
     }
 }
 
@@ -66,7 +67,7 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     println!("Hello World RPC server listening on http://{}", addr);
     println!("Try: curl http://{}/rpc/hello", addr);
-    println!("TypeScript type: {}", HelloResponse::typescript_type());
+    println!("TypeScript type: {}", HelloResponse::typescript().render());
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -99,8 +100,7 @@ mod tests {
 
     #[test]
     fn test_typescript_type() {
-        assert_eq!(HelloResponse::typescript_type(), "{ message: string }");
-        assert_eq!(HelloResponse::typescript_name(), "HelloResponse");
+        assert_eq!(HelloResponse::typescript().render(), "HelloResponse");
     }
 }
 
