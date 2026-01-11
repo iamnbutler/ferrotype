@@ -663,3 +663,73 @@ fn test_generic_types_not_auto_registered() {
         "Generic Pair should not be auto-registered"
     );
 }
+
+// ============================================================================
+// TEMPLATE LITERAL PATTERN TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+#[ts(pattern = "vm-${string}")]
+struct VmId(String);
+
+#[test]
+fn test_template_literal_simple() {
+    let td = VmId::typescript();
+    // Should render as the type name
+    assert_eq!(td.render(), "VmId");
+    // Declaration should show template literal
+    assert_eq!(td.render_declaration(), "type VmId = `vm-${string}`;");
+}
+
+#[derive(TypeScript)]
+#[ts(pattern = "v${number}.${number}.${number}")]
+struct SemVer(String);
+
+#[test]
+fn test_template_literal_semver() {
+    let td = SemVer::typescript();
+    assert_eq!(td.render(), "SemVer");
+    assert_eq!(td.render_declaration(), "type SemVer = `v${number}.${number}.${number}`;");
+}
+
+#[derive(TypeScript)]
+#[ts(pattern = "/api/${string}")]
+struct ApiRoute(String);
+
+#[test]
+fn test_template_literal_api_route() {
+    let td = ApiRoute::typescript();
+    assert_eq!(td.render_declaration(), "type ApiRoute = `/api/${string}`;");
+}
+
+#[derive(TypeScript)]
+#[ts(pattern = "user-${string}-id")]
+struct UserIdPattern(String);
+
+#[test]
+fn test_template_literal_prefix_suffix() {
+    let td = UserIdPattern::typescript();
+    assert_eq!(td.render_declaration(), "type UserIdPattern = `user-${string}-id`;");
+}
+
+#[derive(TypeScript)]
+#[ts(rename = "ProductID", pattern = "prod_${string}")]
+struct ProductId(String);
+
+#[test]
+fn test_template_literal_with_rename() {
+    let td = ProductId::typescript();
+    // Rename should apply to the type name
+    assert_eq!(td.render(), "ProductID");
+    assert_eq!(td.render_declaration(), "type ProductID = `prod_${string}`;");
+}
+
+#[derive(TypeScript)]
+#[ts(pattern = "order_${number}")]
+struct OrderId(i64);
+
+#[test]
+fn test_template_literal_number_type() {
+    let td = OrderId::typescript();
+    assert_eq!(td.render_declaration(), "type OrderId = `order_${number}`;");
+}

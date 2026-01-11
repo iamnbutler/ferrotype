@@ -125,6 +125,8 @@ struct ContainerAttrs {
     content: Option<String>,
     /// Generate untagged union (no discriminant)
     untagged: bool,
+    /// Template literal pattern for branded ID types (e.g., "vm-${string}")
+    pattern: Option<String>,
 }
 
 impl ContainerAttrs {
@@ -165,6 +167,9 @@ impl ContainerAttrs {
                     result.content = Some(value.value());
                 } else if meta.path.is_ident("untagged") {
                     result.untagged = true;
+                } else if meta.path.is_ident("pattern") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.pattern = Some(value.value());
                 }
                 Ok(())
             })?;
@@ -242,6 +247,96 @@ fn get_field_name(
 
     // Otherwise use original name
     original.to_string()
+}
+
+/// Parse a template literal pattern into strings and type names.
+///
+/// For example, `"vm-${string}"` becomes:
+/// - strings: ["vm-", ""]
+/// - types: ["string"]
+///
+/// And `"v${number}.${number}.${number}"` becomes:
+/// - strings: ["v", ".", ".", ""]
+/// - types: ["number", "number", "number"]
+fn parse_template_pattern(pattern: &str) -> syn::Result<(Vec<String>, Vec<String>)> {
+    let mut strings = Vec::new();
+    let mut types = Vec::new();
+    let mut current = String::new();
+    let mut chars = pattern.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '$' && chars.peek() == Some(&'{') {
+            // Found ${...}
+            strings.push(std::mem::take(&mut current));
+            chars.next(); // consume '{'
+
+            let mut type_name = String::new();
+            let mut depth = 1;
+            while let Some(tc) = chars.next() {
+                if tc == '{' {
+                    depth += 1;
+                    type_name.push(tc);
+                } else if tc == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                    type_name.push(tc);
+                } else {
+                    type_name.push(tc);
+                }
+            }
+
+            if type_name.is_empty() {
+                return Err(syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    "Empty type placeholder ${} in pattern",
+                ));
+            }
+            types.push(type_name);
+        } else {
+            current.push(c);
+        }
+    }
+
+    // Push the remaining string (always one more string than types)
+    strings.push(current);
+
+    Ok((strings, types))
+}
+
+/// Convert a type name string to a TypeDef expression.
+/// Supports: string, number, boolean, bigint, and type references.
+fn type_name_to_typedef(name: &str) -> TokenStream2 {
+    match name.trim() {
+        "string" => quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::String) },
+        "number" => quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Number) },
+        "boolean" => quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Boolean) },
+        "bigint" => quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::BigInt) },
+        "any" => quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Any) },
+        "unknown" => quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Unknown) },
+        // For other types, treat as a reference
+        other => {
+            let type_ref = other.trim();
+            quote! { ferro_type::TypeDef::Ref(#type_ref.to_string()) }
+        }
+    }
+}
+
+/// Generate a TemplateLiteral TypeDef expression from parsed pattern.
+fn generate_template_literal_expr(strings: &[String], types: &[String]) -> TokenStream2 {
+    let string_literals: Vec<_> = strings.iter().map(|s| quote! { #s.to_string() }).collect();
+    let type_exprs: Vec<_> = types.iter().map(|t| {
+        let typedef = type_name_to_typedef(t);
+        quote! { Box::new(#typedef) }
+    }).collect();
+
+    quote! {
+        ferro_type::TypeDef::TemplateLiteral {
+            strings: vec![#(#string_literals),*],
+            types: vec![#(#type_exprs),*],
+        }
+    }
 }
 
 /// Derive macro for generating TypeScript type definitions from Rust types.
@@ -330,6 +425,13 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     input,
                     "#[ts(transparent)] can only be used on newtype structs (single unnamed field)",
                 ));
+            }
+
+            // Handle template literal patterns - typically for branded ID types
+            if let Some(ref pattern) = container_attrs.pattern {
+                let (strings, types) = parse_template_pattern(pattern)?;
+                let typedef = generate_template_literal_expr(&strings, &types);
+                return generate_impl(name, &type_name, generics, typedef);
             }
 
             let typedef = generate_struct_typedef(&data.fields, &container_attrs)?;
