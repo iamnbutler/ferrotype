@@ -408,3 +408,219 @@ fn test_skip_with_rename_all() {
     assert!(!rendered.contains("internalId"));
     assert!(!rendered.contains("internal_id"));
 }
+
+// ============================================================================
+// FLATTEN ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+struct InnerData {
+    inner_field: String,
+    inner_count: i32,
+}
+
+#[derive(TypeScript)]
+struct OuterWithFlatten {
+    outer_id: String,
+    #[ts(flatten)]
+    inner: InnerData,
+    outer_active: bool,
+}
+
+#[test]
+fn test_flatten_basic() {
+    let td = OuterWithFlatten::typescript();
+    let rendered = inner_def(td).render();
+    // Should contain all fields from both structs
+    assert!(rendered.contains("outer_id: string"));
+    assert!(rendered.contains("inner_field: string"));
+    assert!(rendered.contains("inner_count: number"));
+    assert!(rendered.contains("outer_active: boolean"));
+    // Should NOT contain the 'inner' field as a nested object
+    assert!(!rendered.contains("inner: InnerData"));
+    assert!(!rendered.contains("inner: {"));
+}
+
+#[derive(TypeScript)]
+struct Metadata {
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(TypeScript)]
+struct Resource {
+    id: String,
+    #[ts(flatten)]
+    meta: Metadata,
+}
+
+#[test]
+fn test_flatten_with_multiple_fields() {
+    let td = Resource::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("id: string"));
+    assert!(rendered.contains("created_at: string"));
+    assert!(rendered.contains("updated_at: string"));
+}
+
+// ============================================================================
+// TYPE OVERRIDE ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+struct DateFields {
+    #[ts(type = "Date")]
+    created_at: String,
+    #[ts(type = "Date")]
+    updated_at: String,
+    name: String,
+}
+
+#[test]
+fn test_type_override() {
+    let td = DateFields::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("created_at: Date"));
+    assert!(rendered.contains("updated_at: Date"));
+    assert!(rendered.contains("name: string"));
+}
+
+#[derive(TypeScript)]
+struct CustomTypes {
+    #[ts(type = "HTMLElement")]
+    element: u64,
+    #[ts(type = "Map<string, number>")]
+    data: String,
+}
+
+#[test]
+fn test_type_override_complex() {
+    let td = CustomTypes::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("element: HTMLElement"));
+    assert!(rendered.contains("data: Map<string, number>"));
+}
+
+// ============================================================================
+// TRANSPARENT ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+#[ts(transparent)]
+struct UserId(String);
+
+#[test]
+fn test_transparent_newtype() {
+    let td = UserId::typescript();
+    // Transparent types should NOT wrap in Named - they become the inner type directly
+    assert_eq!(td.render(), "string");
+}
+
+#[derive(TypeScript)]
+#[ts(transparent)]
+struct Count(i32);
+
+#[test]
+fn test_transparent_number() {
+    let td = Count::typescript();
+    assert_eq!(td.render(), "number");
+}
+
+#[derive(TypeScript)]
+#[ts(transparent)]
+struct Items(Vec<String>);
+
+#[test]
+fn test_transparent_complex() {
+    let td = Items::typescript();
+    assert_eq!(td.render(), "string[]");
+}
+
+// ============================================================================
+// DEFAULT ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+struct ConfigWithDefaults {
+    required_field: String,
+    #[ts(default)]
+    optional_count: i32,
+    #[ts(default)]
+    optional_name: String,
+}
+
+#[test]
+fn test_default_makes_optional() {
+    let td = ConfigWithDefaults::typescript();
+    let rendered = inner_def(td).render();
+    // required_field should NOT have ?
+    assert!(rendered.contains("required_field: string"));
+    assert!(!rendered.contains("required_field?"));
+    // optional fields should have ?
+    assert!(rendered.contains("optional_count?: number"));
+    assert!(rendered.contains("optional_name?: string"));
+}
+
+#[derive(TypeScript)]
+#[ts(rename_all = "camelCase")]
+struct ConfigWithDefaultsAndRename {
+    user_id: String,
+    #[ts(default)]
+    display_name: String,
+}
+
+#[test]
+fn test_default_with_rename() {
+    let td = ConfigWithDefaultsAndRename::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("userId: string"));
+    assert!(rendered.contains("displayName?: string"));
+}
+
+// ============================================================================
+// INLINE ATTRIBUTE TESTS
+// ============================================================================
+
+#[derive(TypeScript)]
+struct Address {
+    street: String,
+    city: String,
+}
+
+#[derive(TypeScript)]
+struct PersonWithInline {
+    name: String,
+    #[ts(inline)]
+    address: Address,
+}
+
+#[test]
+fn test_inline_type() {
+    let td = PersonWithInline::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("name: string"));
+    // The address field should be inlined, not a reference to Address
+    // It should contain the actual object type definition
+    assert!(rendered.contains("address: { street: string; city: string }"));
+    assert!(!rendered.contains("address: Address"));
+}
+
+#[derive(TypeScript)]
+struct NestedType {
+    value: i32,
+}
+
+#[derive(TypeScript)]
+struct ContainerWithInline {
+    #[ts(inline)]
+    nested: NestedType,
+    other: String,
+}
+
+#[test]
+fn test_inline_simple_type() {
+    let td = ContainerWithInline::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("nested: { value: number }"));
+    assert!(rendered.contains("other: string"));
+}

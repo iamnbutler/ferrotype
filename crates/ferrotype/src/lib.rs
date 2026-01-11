@@ -312,6 +312,42 @@ impl Literal {
 }
 
 // ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Extracts fields from an Object TypeDef, unwrapping Named if necessary.
+///
+/// This is used by the derive macro to implement `#[ts(flatten)]`. When a field
+/// is marked with flatten, its type's fields are extracted and merged into the
+/// containing object.
+///
+/// # Panics
+///
+/// Panics if the TypeDef is not an Object (or Named wrapping an Object).
+pub fn extract_object_fields(typedef: &TypeDef) -> Vec<Field> {
+    match typedef {
+        TypeDef::Object(fields) => fields.clone(),
+        TypeDef::Named { def, .. } => extract_object_fields(def),
+        other => panic!(
+            "#[ts(flatten)] can only be used on fields with object types, got: {:?}",
+            other
+        ),
+    }
+}
+
+/// Extracts the inner type definition, unwrapping Named if necessary.
+///
+/// This is used by the derive macro to implement `#[ts(inline)]`. When a field
+/// is marked with inline, the full type definition is inlined instead of using
+/// a type reference.
+pub fn inline_typedef(typedef: TypeDef) -> TypeDef {
+    match typedef {
+        TypeDef::Named { def, .. } => *def,
+        other => other,
+    }
+}
+
+// ============================================================================
 // TYPE REGISTRY
 // ============================================================================
 
