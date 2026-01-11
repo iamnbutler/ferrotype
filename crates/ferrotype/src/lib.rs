@@ -1,7 +1,8 @@
-//! Ferrotype: Rust-to-TypeScript type mapping for Zed RPC
+//! Ferrotype: Rust-to-TypeScript type generation via derive macro
 //!
-//! This crate provides traits for generating TypeScript type definitions
-//! from Rust types, enabling type-safe RPC communication.
+//! This crate provides traits and derive macros for generating TypeScript type
+//! definitions from Rust structs and enums using an intermediate representation
+//! for deduplication and dependency ordering.
 //!
 //! # Core Design
 //!

@@ -6,7 +6,7 @@ Rust-to-TypeScript type generation via derive macro. Generates TypeScript type d
 
 ```toml
 [dependencies]
-ferro-type = "0.1.0"
+ferro-type = "0.1.1"
 ```
 
 ## Features
