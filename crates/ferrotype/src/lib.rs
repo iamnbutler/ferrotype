@@ -156,6 +156,28 @@ pub enum TypeDef {
         args: Vec<TypeDef>,
     },
 
+    /// An indexed access type: `T["K"]`
+    ///
+    /// Indexed access types allow extracting a property type from another type.
+    /// This is commonly used for type-safe property access patterns.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Profile["login"] extracts the type of the "login" property from Profile
+    /// let login_type = TypeDef::IndexedAccess {
+    ///     base: "Profile".into(),
+    ///     key: "login".into(),
+    /// };
+    /// assert_eq!(login_type.render(), "Profile[\"login\"]");
+    /// ```
+    IndexedAccess {
+        /// The base type to index into (e.g., "Profile")
+        base: String,
+        /// The property key to access (e.g., "login")
+        key: String,
+    },
+
     /// A template literal type: `` `prefix${Type}suffix` ``
     ///
     /// Template literal types enable compile-time string pattern validation in TypeScript.
@@ -324,6 +346,9 @@ impl TypeDef {
             TypeDef::Generic { base, args } => {
                 let args_str: Vec<_> = args.iter().map(|t| t.render()).collect();
                 format!("{}<{}>", base, args_str.join(", "))
+            }
+            TypeDef::IndexedAccess { base, key } => {
+                format!("{}[\"{}\"]", base, key.replace('\\', "\\\\").replace('"', "\\\""))
             }
             TypeDef::TemplateLiteral { strings, types } => {
                 let mut result = String::from("`");
@@ -638,8 +663,9 @@ impl TypeRegistry {
                     self.extract_named_types(ty);
                 }
             }
-            // Primitives, Refs, and Literals have no nested named types
-            TypeDef::Primitive(_) | TypeDef::Ref(_) | TypeDef::Literal(_) => {}
+            // IndexedAccess references a base type by name (similar to Ref)
+            // Primitives, Refs, Literals, and IndexedAccess have no nested named types
+            TypeDef::Primitive(_) | TypeDef::Ref(_) | TypeDef::Literal(_) | TypeDef::IndexedAccess { .. } => {}
         }
     }
 
@@ -721,6 +747,12 @@ impl TypeRegistry {
             TypeDef::TemplateLiteral { types, .. } => {
                 for ty in types {
                     self.collect_dependencies(ty, deps);
+                }
+            }
+            TypeDef::IndexedAccess { base, .. } => {
+                // The base type is a dependency
+                if self.types.contains_key(base) {
+                    deps.insert(base.clone());
                 }
             }
             TypeDef::Primitive(_) | TypeDef::Literal(_) => {}
@@ -1372,6 +1404,40 @@ mod tests {
     }
 
     #[test]
+    fn test_typedef_indexed_access_render() {
+        // Basic indexed access: Profile["login"]
+        let indexed = TypeDef::IndexedAccess {
+            base: "Profile".into(),
+            key: "login".into(),
+        };
+        assert_eq!(indexed.render(), "Profile[\"login\"]");
+
+        // Nested namespace: User.Settings["theme"]
+        let nested = TypeDef::IndexedAccess {
+            base: "User.Settings".into(),
+            key: "theme".into(),
+        };
+        assert_eq!(nested.render(), "User.Settings[\"theme\"]");
+    }
+
+    #[test]
+    fn test_typedef_indexed_access_escaping() {
+        // Key with quotes
+        let with_quotes = TypeDef::IndexedAccess {
+            base: "Config".into(),
+            key: "key\"with\"quotes".into(),
+        };
+        assert_eq!(with_quotes.render(), "Config[\"key\\\"with\\\"quotes\"]");
+
+        // Key with backslashes
+        let with_backslash = TypeDef::IndexedAccess {
+            base: "Config".into(),
+            key: "path\\to\\key".into(),
+        };
+        assert_eq!(with_backslash.render(), "Config[\"path\\\\to\\\\key\"]");
+    }
+
+    #[test]
     fn test_typescript_trait_primitives() {
         assert_eq!(<()>::typescript().render(), "void");
         assert_eq!(bool::typescript().render(), "boolean");
@@ -1697,6 +1763,44 @@ mod tests {
 
         assert!(c_pos < b_pos, "C should come before B");
         assert!(b_pos < a_pos, "B should come before A");
+    }
+
+    #[test]
+    fn test_registry_indexed_access_dependency() {
+        let mut registry = TypeRegistry::new();
+
+        // Profile type (no dependencies)
+        let profile = TypeDef::Named {
+            namespace: vec![],
+            name: "Profile".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("login", TypeDef::Primitive(Primitive::String)),
+                Field::new("email", TypeDef::Primitive(Primitive::String)),
+            ])),
+            module: None,
+        };
+
+        // UserLogin type depends on Profile via IndexedAccess
+        let user_login = TypeDef::Named {
+            namespace: vec![],
+            name: "UserLogin".to_string(),
+            def: Box::new(TypeDef::IndexedAccess {
+                base: "Profile".to_string(),
+                key: "login".to_string(),
+            }),
+            module: None,
+        };
+
+        // Add in wrong order
+        registry.add_typedef(user_login);
+        registry.add_typedef(profile);
+
+        let sorted = registry.sorted_types();
+
+        let profile_pos = sorted.iter().position(|&n| n == "Profile").unwrap();
+        let user_login_pos = sorted.iter().position(|&n| n == "UserLogin").unwrap();
+
+        assert!(profile_pos < user_login_pos, "Profile should come before UserLogin");
     }
 
     // ========================================================================

@@ -813,3 +813,87 @@ fn test_namespaced_type_in_registry() {
     assert!(output.contains("namespace VM {"));
     assert!(output.contains("namespace Git {"));
 }
+
+// ============================================================================
+// INDEXED ACCESS ATTRIBUTE TESTS
+// ============================================================================
+
+/// Profile type that we'll reference with indexed access
+#[derive(TypeScript)]
+struct Profile {
+    login: String,
+    email: String,
+    avatar_url: String,
+}
+
+/// Struct using indexed access for a field
+#[derive(TypeScript)]
+struct UserCredentials {
+    #[ts(index = "Profile", key = "login")]
+    username: String,
+    password_hash: String,
+}
+
+#[test]
+fn test_indexed_access_basic() {
+    let td = UserCredentials::typescript();
+    let rendered = inner_def(td).render();
+    // username field should use indexed access type
+    assert!(rendered.contains("username: Profile[\"login\"]"));
+    // password_hash should use the Rust type's TypeScript equivalent
+    assert!(rendered.contains("password_hash: string"));
+}
+
+/// Struct using indexed access with camelCase renaming
+#[derive(TypeScript)]
+#[ts(rename_all = "camelCase")]
+struct ApiCredentials {
+    #[ts(index = "Profile", key = "email")]
+    user_email: String,
+    api_key: String,
+}
+
+#[test]
+fn test_indexed_access_with_rename() {
+    let td = ApiCredentials::typescript();
+    let rendered = inner_def(td).render();
+    // Field should be renamed to camelCase
+    assert!(rendered.contains("userEmail: Profile[\"email\"]"));
+    assert!(rendered.contains("apiKey: string"));
+}
+
+/// Struct using indexed access with optional field
+#[derive(TypeScript)]
+struct OptionalIndexedAccess {
+    id: String,
+    #[ts(index = "Profile", key = "avatar_url")]
+    #[ts(default)]
+    avatar: String,
+}
+
+#[test]
+fn test_indexed_access_with_default() {
+    let td = OptionalIndexedAccess::typescript();
+    let rendered = inner_def(td).render();
+    // Should be optional (?) and use indexed access type
+    assert!(rendered.contains("avatar?: Profile[\"avatar_url\"]"));
+}
+
+/// Struct using multiple indexed access fields
+#[derive(TypeScript)]
+struct MultipleIndexedAccess {
+    #[ts(index = "Profile", key = "login")]
+    login: String,
+    #[ts(index = "Profile", key = "email")]
+    email: String,
+    custom_field: i32,
+}
+
+#[test]
+fn test_multiple_indexed_access() {
+    let td = MultipleIndexedAccess::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("login: Profile[\"login\"]"));
+    assert!(rendered.contains("email: Profile[\"email\"]"));
+    assert!(rendered.contains("custom_field: number"));
+}

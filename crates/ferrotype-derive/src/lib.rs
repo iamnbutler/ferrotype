@@ -205,6 +205,10 @@ struct FieldAttrs {
     default: bool,
     /// Inline the type definition instead of using a reference
     inline: bool,
+    /// Base type for indexed access (e.g., "Profile" in Profile["login"])
+    index: Option<String>,
+    /// Key for indexed access (e.g., "login" in Profile["login"])
+    key: Option<String>,
 }
 
 impl FieldAttrs {
@@ -231,12 +235,23 @@ impl FieldAttrs {
                     result.default = true;
                 } else if meta.path.is_ident("inline") {
                     result.inline = true;
+                } else if meta.path.is_ident("index") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.index = Some(value.value());
+                } else if meta.path.is_ident("key") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.key = Some(value.value());
                 }
                 Ok(())
             })?;
         }
 
         Ok(result)
+    }
+
+    /// Returns true if this field uses indexed access type
+    fn has_indexed_access(&self) -> bool {
+        self.index.is_some() && self.key.is_some()
     }
 }
 
@@ -726,6 +741,14 @@ fn generate_struct_typedef(
 
                 let field_type = &f.ty;
 
+                // Validate indexed access attributes - both must be present or neither
+                if field_attrs.index.is_some() != field_attrs.key.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        f,
+                        "#[ts(index = \"...\")] and #[ts(key = \"...\")] must be used together",
+                    ));
+                }
+
                 if field_attrs.flatten {
                     // For flattened fields, we extract the inner type's fields at runtime
                     flatten_exprs.push(quote! {
@@ -741,6 +764,16 @@ fn generate_struct_typedef(
                     // Determine the type expression
                     let type_expr = if let Some(ref type_override) = field_attrs.type_override {
                         quote! { ferro_type::TypeDef::Ref(#type_override.to_string()) }
+                    } else if field_attrs.has_indexed_access() {
+                        // Use indexed access type: Profile["login"]
+                        let index_base = field_attrs.index.as_ref().unwrap();
+                        let index_key = field_attrs.key.as_ref().unwrap();
+                        quote! {
+                            ferro_type::TypeDef::IndexedAccess {
+                                base: #index_base.to_string(),
+                                key: #index_key.to_string(),
+                            }
+                        }
                     } else {
                         let base_expr = type_to_typedef(field_type);
                         if field_attrs.inline {
