@@ -12,8 +12,23 @@
 //! - Analyzed for type dependencies
 //! - Deduplicated for cleaner output
 //! - Extended for additional targets
+//!
+//! # Auto-Registration
+//!
+//! Types that derive `TypeScript` are automatically registered via linkme's
+//! distributed slice mechanism. Use [`TypeRegistry::collect`] to gather all
+//! registered types:
+//!
+//! ```ignore
+//! use ferrotype::TypeRegistry;
+//!
+//! let registry = TypeRegistry::collect();
+//! let output = registry.render_exported();
+//! std::fs::write("types.ts", output)?;
+//! ```
 
 pub use ferrotype_derive::TypeScript;
+pub use linkme;
 
 use std::collections::HashMap;
 
@@ -312,6 +327,20 @@ impl Literal {
 }
 
 // ============================================================================
+// AUTO-REGISTRATION (DISTRIBUTED SLICE)
+// ============================================================================
+
+/// A distributed slice collecting all auto-registered TypeScript type functions.
+///
+/// Each type derived with `#[derive(TypeScript)]` contributes a function to this
+/// slice that returns its TypeDef. Use [`TypeRegistry::collect`] to gather all
+/// registered types into a registry.
+///
+/// This uses linkme's distributed slice mechanism for zero-cost link-time collection.
+#[linkme::distributed_slice]
+pub static TYPESCRIPT_TYPES: [fn() -> TypeDef];
+
+// ============================================================================
 // TYPE REGISTRY
 // ============================================================================
 
@@ -349,6 +378,29 @@ impl TypeRegistry {
     /// Creates a new empty registry.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Collects all auto-registered types from the distributed slice.
+    ///
+    /// This gathers all types that were derived with `#[derive(TypeScript)]`
+    /// across all linked crates. Types are automatically deduplicated by name.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use ferrotype::TypeRegistry;
+    ///
+    /// let registry = TypeRegistry::collect();
+    /// println!("Found {} types", registry.len());
+    /// std::fs::write("types.ts", registry.render_exported())?;
+    /// ```
+    pub fn collect() -> Self {
+        let mut registry = Self::new();
+        for type_fn in TYPESCRIPT_TYPES {
+            let typedef = type_fn();
+            registry.add_typedef(typedef);
+        }
+        registry
     }
 
     /// Registers a type that implements TypeScript.

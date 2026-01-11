@@ -626,6 +626,9 @@ fn generate_impl(
 ) -> syn::Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
+    // Check if this is a non-generic type (can be auto-registered)
+    let has_type_params = generics.params.iter().any(|p| matches!(p, GenericParam::Type(_)));
+
     // Add TypeScript bounds to generic parameters
     let where_clause = if generics.params.is_empty() {
         where_clause.cloned()
@@ -654,7 +657,8 @@ fn generate_impl(
         }
     };
 
-    Ok(quote! {
+    // Generate the impl block
+    let impl_block = quote! {
         impl #impl_generics ferrotype::TypeScript for #name #ty_generics #where_clause {
             fn typescript() -> ferrotype::TypeDef {
                 ferrotype::TypeDef::Named {
@@ -663,5 +667,37 @@ fn generate_impl(
                 }
             }
         }
-    })
+    };
+
+    // Only auto-register non-generic types
+    // Generic types cannot be registered because we don't know which concrete
+    // instantiations will be used at compile time
+    if has_type_params {
+        Ok(impl_block)
+    } else {
+        // Generate a unique identifier for the registration static
+        // Convert PascalCase name to SCREAMING_SNAKE_CASE for the static
+        let screaming_name = to_screaming_snake_case(&name.to_string());
+        let register_ident = quote::format_ident!("__FERROTYPE_REGISTER_{}", screaming_name);
+
+        Ok(quote! {
+            #impl_block
+
+            #[ferrotype::linkme::distributed_slice(ferrotype::TYPESCRIPT_TYPES)]
+            #[linkme(crate = ferrotype::linkme)]
+            static #register_ident: fn() -> ferrotype::TypeDef = || <#name as ferrotype::TypeScript>::typescript();
+        })
+    }
+}
+
+/// Convert PascalCase to SCREAMING_SNAKE_CASE
+fn to_screaming_snake_case(name: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(c.to_ascii_uppercase());
+    }
+    result
 }
