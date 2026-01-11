@@ -526,6 +526,7 @@ mod tests {
         let mut gen = Generator::with_defaults();
 
         let user_type = TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("id", TypeDef::Primitive(Primitive::String)),
@@ -545,6 +546,7 @@ mod tests {
         let mut gen = Generator::new(Config::new().export_style(ExportStyle::None));
 
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
@@ -560,6 +562,7 @@ mod tests {
         let mut gen = Generator::new(Config::new().export_style(ExportStyle::Named));
 
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
@@ -574,11 +577,13 @@ mod tests {
         let mut gen = Generator::new(Config::new().export_style(ExportStyle::Grouped));
 
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
         });
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
@@ -616,6 +621,7 @@ mod tests {
 
         let mut gen = Generator::new(Config::new().output(&output_path));
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
@@ -635,6 +641,7 @@ mod tests {
 
         let mut gen = Generator::new(Config::new().output(&output_path));
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
@@ -648,6 +655,7 @@ mod tests {
 
         // Add another type
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
@@ -680,6 +688,7 @@ mod tests {
 
         let mut registry = TypeRegistry::new();
         registry.add_typedef(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
@@ -716,21 +725,25 @@ mod tests {
         let mut gen = Generator::with_defaults();
 
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
         });
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
         });
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Request".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::api".to_string()),
         });
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Orphan".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
@@ -750,11 +763,13 @@ mod tests {
         let mut gen = Generator::with_defaults();
 
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
         });
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
             module: Some("my_crate::models".to_string()),
@@ -774,11 +789,13 @@ mod tests {
         let mut gen = Generator::with_defaults();
 
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models::user".to_string()),
         });
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Request".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::api".to_string()),
@@ -808,6 +825,7 @@ mod tests {
 
         let mut gen = Generator::with_defaults();
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
@@ -823,6 +841,7 @@ mod tests {
 
         // Add another type
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
             module: Some("my_crate::models".to_string()),
@@ -839,6 +858,7 @@ mod tests {
 
         let mut gen = Generator::with_defaults();
         gen.add(TypeDef::Named {
+            namespace: vec![],
             name: "Orphan".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,

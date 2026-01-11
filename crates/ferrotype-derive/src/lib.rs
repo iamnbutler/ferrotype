@@ -127,6 +127,8 @@ struct ContainerAttrs {
     untagged: bool,
     /// Template literal pattern for branded ID types (e.g., "vm-${string}")
     pattern: Option<String>,
+    /// Namespace path for the type (e.g., "VM::Git" or "VM.Git")
+    namespace: Vec<String>,
 }
 
 impl ContainerAttrs {
@@ -170,6 +172,15 @@ impl ContainerAttrs {
                 } else if meta.path.is_ident("pattern") {
                     let value: syn::LitStr = meta.value()?.parse()?;
                     result.pattern = Some(value.value());
+                } else if meta.path.is_ident("namespace") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    // Parse namespace path - supports both "::" and "." as separators
+                    let ns_str = value.value();
+                    result.namespace = ns_str
+                        .split(|c| c == ':' || c == '.')
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string())
+                        .collect();
                 }
                 Ok(())
             })?;
@@ -410,7 +421,7 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
     match &input.data {
         Data::Enum(data) => {
             let typedef = generate_enum_typedef(&data.variants, &container_attrs)?;
-            generate_impl(name, &type_name, generics, typedef)
+            generate_impl(name, &type_name, &container_attrs.namespace, generics, typedef)
         }
         Data::Struct(data) => {
             // Handle transparent newtypes - they become the inner type directly
@@ -431,11 +442,11 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
             if let Some(ref pattern) = container_attrs.pattern {
                 let (strings, types) = parse_template_pattern(pattern)?;
                 let typedef = generate_template_literal_expr(&strings, &types);
-                return generate_impl(name, &type_name, generics, typedef);
+                return generate_impl(name, &type_name, &[], generics, typedef);
             }
 
             let typedef = generate_struct_typedef(&data.fields, &container_attrs)?;
-            generate_impl(name, &type_name, generics, typedef)
+            generate_impl(name, &type_name, &container_attrs.namespace, generics, typedef)
         }
         Data::Union(_) => {
             Err(syn::Error::new_spanned(
@@ -849,6 +860,7 @@ fn generate_transparent_impl(
 fn generate_impl(
     name: &Ident,
     name_str: &str,
+    namespace: &[String],
     generics: &Generics,
     typedef_expr: TokenStream2,
 ) -> syn::Result<TokenStream2> {
@@ -898,10 +910,19 @@ fn generate_impl(
         quote! {}
     };
 
+    // Generate namespace vec
+    let namespace_expr = if namespace.is_empty() {
+        quote! { vec![] }
+    } else {
+        let ns_strings = namespace.iter().map(|s| quote! { #s.to_string() });
+        quote! { vec![#(#ns_strings),*] }
+    };
+
     Ok(quote! {
         impl #impl_generics ferro_type::TypeScript for #name #ty_generics #where_clause {
             fn typescript() -> ferro_type::TypeDef {
                 ferro_type::TypeDef::Named {
+                    namespace: #namespace_expr,
                     name: #name_str.to_string(),
                     def: Box::new(#typedef_expr),
                     module: Some(module_path!().to_string()),
