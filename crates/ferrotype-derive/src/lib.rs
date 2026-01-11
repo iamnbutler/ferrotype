@@ -209,7 +209,7 @@ fn get_field_name(
     original.to_string()
 }
 
-/// Derive macro for generating TypeScript type definitions from Rust enums.
+/// Derive macro for generating TypeScript type definitions from Rust types.
 ///
 /// # Examples
 ///
@@ -242,6 +242,17 @@ fn get_field_name(
 ///     Rectangle { x: f64, y: f64, width: f64, height: f64 },
 /// }
 /// // Generates: { type: "Circle"; center: Point; radius: number } | { type: "Rectangle"; x: number; y: number; width: number; height: number }
+/// ```
+///
+/// ## Structs
+/// ```ignore
+/// #[derive(TypeScript)]
+/// struct User {
+///     id: String,
+///     name: String,
+///     age: i32,
+/// }
+/// // Generates: { id: string; name: string; age: number }
 /// ```
 #[proc_macro_derive(TypeScript, attributes(ts))]
 pub fn derive_typescript(input: TokenStream) -> TokenStream {
@@ -526,4 +537,3 @@ fn generate_impl(
         }
     })
 }
-

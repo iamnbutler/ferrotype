@@ -1,6 +1,0 @@
----
-source: crates/ferrotype/tests/codegen_snapshots.rs
-assertion_line: 96
-expression: "<Vec<bool>>::typescript_type()"
----
-boolean[]

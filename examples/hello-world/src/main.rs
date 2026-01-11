@@ -9,26 +9,15 @@
 //! Test with: curl http://localhost:3000/rpc/hello
 
 use axum::{routing::get, Json, Router};
-use ferrotype::{Field, Primitive, TypeDef, TypeScript};
+use ferrotype::TypeScript;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 
 /// Response from the hello RPC method.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TypeScript)]
 pub struct HelloResponse {
     pub message: String,
-}
-
-impl TypeScript for HelloResponse {
-    fn typescript() -> TypeDef {
-        TypeDef::Named {
-            name: "HelloResponse".to_string(),
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("message", TypeDef::Primitive(Primitive::String)),
-            ])),
-        }
-    }
 }
 
 /// The hello RPC method - no args, returns a greeting.
@@ -100,7 +89,14 @@ mod tests {
 
     #[test]
     fn test_typescript_type() {
-        assert_eq!(HelloResponse::typescript().render(), "HelloResponse");
+        let td = HelloResponse::typescript();
+        // Named types render as their name
+        assert_eq!(td.render(), "HelloResponse");
+        // The declaration shows the full type
+        assert_eq!(
+            td.render_declaration(),
+            "type HelloResponse = { message: string };"
+        );
     }
 }
 

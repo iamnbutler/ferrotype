@@ -41,6 +41,19 @@ pub struct User {
     pub active: bool,
 }
 
+impl TypeScript for User {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "User".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Primitive(Primitive::Number)),
+                Field::new("name", TypeDef::Primitive(Primitive::String)),
+                Field::new("email", TypeDef::Primitive(Primitive::String)),
+                Field::new("active", TypeDef::Primitive(Primitive::Boolean)),
+            ])),
+        }
+    }
+}
 
 /// Struct with optional fields
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -51,21 +64,71 @@ pub struct Profile {
     pub avatar_url: Option<String>,
 }
 
+impl TypeScript for Profile {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Profile".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("username", TypeDef::Primitive(Primitive::String)),
+                Field::new("display_name", TypeDef::Union(vec![
+                    TypeDef::Primitive(Primitive::String),
+                    TypeDef::Primitive(Primitive::Null),
+                ])),
+                Field::new("bio", TypeDef::Union(vec![
+                    TypeDef::Primitive(Primitive::String),
+                    TypeDef::Primitive(Primitive::Null),
+                ])),
+                Field::new("avatar_url", TypeDef::Union(vec![
+                    TypeDef::Primitive(Primitive::String),
+                    TypeDef::Primitive(Primitive::Null),
+                ])),
+            ])),
+        }
+    }
+}
 
 /// Tuple struct
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
+impl TypeScript for Rgb {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Rgb".to_string(),
+            def: Box::new(TypeDef::Tuple(vec![
+                TypeDef::Primitive(Primitive::Number),
+                TypeDef::Primitive(Primitive::Number),
+                TypeDef::Primitive(Primitive::Number),
+            ])),
+        }
+    }
+}
 
 /// Unit struct
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Ping;
 
+impl TypeScript for Ping {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Ping".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::Null)),
+        }
+    }
+}
 
 /// Newtype wrapper
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UserId(pub u64);
 
+impl TypeScript for UserId {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "UserId".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::Number)),
+        }
+    }
+}
 
 /// Nested struct
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -74,6 +137,17 @@ pub struct Rectangle {
     pub bottom_right: Point,
 }
 
+impl TypeScript for Rectangle {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Rectangle".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("top_left", TypeDef::Ref("Point".to_string())),
+                Field::new("bottom_right", TypeDef::Ref("Point".to_string())),
+            ])),
+        }
+    }
+}
 
 /// Struct with Vec field
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -81,6 +155,16 @@ pub struct Polygon {
     pub vertices: Vec<Point>,
 }
 
+impl TypeScript for Polygon {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Polygon".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("vertices", TypeDef::Array(Box::new(TypeDef::Ref("Point".to_string())))),
+            ])),
+        }
+    }
+}
 
 /// Struct with HashMap field
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -88,6 +172,19 @@ pub struct Config {
     pub settings: HashMap<String, String>,
 }
 
+impl TypeScript for Config {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Config".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("settings", TypeDef::Record {
+                    key: Box::new(TypeDef::Primitive(Primitive::String)),
+                    value: Box::new(TypeDef::Primitive(Primitive::String)),
+                }),
+            ])),
+        }
+    }
+}
 
 // ============================================================================
 // ENUM FIXTURES
@@ -102,6 +199,19 @@ pub enum Status {
     Failed,
 }
 
+impl TypeScript for Status {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Status".to_string(),
+            def: Box::new(TypeDef::Union(vec![
+                TypeDef::Literal(ferrotype::Literal::String("Pending".to_string())),
+                TypeDef::Literal(ferrotype::Literal::String("Active".to_string())),
+                TypeDef::Literal(ferrotype::Literal::String("Completed".to_string())),
+                TypeDef::Literal(ferrotype::Literal::String("Failed".to_string())),
+            ])),
+        }
+    }
+}
 
 /// Enum with tuple variants
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -110,6 +220,30 @@ pub enum Coordinate {
     D3(f64, f64, f64),
 }
 
+impl TypeScript for Coordinate {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Coordinate".to_string(),
+            def: Box::new(TypeDef::Union(vec![
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("D2".to_string()))),
+                    Field::new("value", TypeDef::Tuple(vec![
+                        TypeDef::Primitive(Primitive::Number),
+                        TypeDef::Primitive(Primitive::Number),
+                    ])),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("D3".to_string()))),
+                    Field::new("value", TypeDef::Tuple(vec![
+                        TypeDef::Primitive(Primitive::Number),
+                        TypeDef::Primitive(Primitive::Number),
+                        TypeDef::Primitive(Primitive::Number),
+                    ])),
+                ]),
+            ])),
+        }
+    }
+}
 
 /// Enum with struct variants
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -118,7 +252,6 @@ pub enum Shape {
     Rectangle { top_left: Point, width: f64, height: f64 },
     Triangle { a: Point, b: Point, c: Point },
 }
-
 
 /// Mixed variant enum (unit, tuple, and struct variants)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -129,6 +262,31 @@ pub enum Message {
     Error { code: i32, message: String },
 }
 
+impl TypeScript for Message {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "Message".to_string(),
+            def: Box::new(TypeDef::Union(vec![
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Ping".to_string()))),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Text".to_string()))),
+                    Field::new("value", TypeDef::Primitive(Primitive::String)),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Binary".to_string()))),
+                    Field::new("value", TypeDef::Array(Box::new(TypeDef::Primitive(Primitive::Number)))),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Error".to_string()))),
+                    Field::new("code", TypeDef::Primitive(Primitive::Number)),
+                    Field::new("message", TypeDef::Primitive(Primitive::String)),
+                ]),
+            ])),
+        }
+    }
+}
 
 /// Optional enum wrapper
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -136,7 +294,6 @@ pub enum OptionalValue<T> {
     None,
     Some(T),
 }
-
 
 // ============================================================================
 // RPC REQUEST/RESPONSE FIXTURES
@@ -148,6 +305,16 @@ pub struct GetUserRequest {
     pub user_id: u64,
 }
 
+impl TypeScript for GetUserRequest {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "GetUserRequest".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("user_id", TypeDef::Primitive(Primitive::Number)),
+            ])),
+        }
+    }
+}
 
 /// Typical RPC response
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -155,6 +322,19 @@ pub struct GetUserResponse {
     pub user: Option<User>,
 }
 
+impl TypeScript for GetUserResponse {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "GetUserResponse".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("user", TypeDef::Union(vec![
+                    TypeDef::Ref("User".to_string()),
+                    TypeDef::Primitive(Primitive::Null),
+                ])),
+            ])),
+        }
+    }
+}
 
 /// List request with pagination
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -164,6 +344,21 @@ pub struct ListUsersRequest {
     pub filter: Option<String>,
 }
 
+impl TypeScript for ListUsersRequest {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "ListUsersRequest".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("page", TypeDef::Primitive(Primitive::Number)),
+                Field::new("per_page", TypeDef::Primitive(Primitive::Number)),
+                Field::new("filter", TypeDef::Union(vec![
+                    TypeDef::Primitive(Primitive::String),
+                    TypeDef::Primitive(Primitive::Null),
+                ])),
+            ])),
+        }
+    }
+}
 
 /// List response with pagination metadata
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -174,6 +369,19 @@ pub struct ListUsersResponse {
     pub per_page: u32,
 }
 
+impl TypeScript for ListUsersResponse {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "ListUsersResponse".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("users", TypeDef::Array(Box::new(TypeDef::Ref("User".to_string())))),
+                Field::new("total", TypeDef::Primitive(Primitive::Number)),
+                Field::new("page", TypeDef::Primitive(Primitive::Number)),
+                Field::new("per_page", TypeDef::Primitive(Primitive::Number)),
+            ])),
+        }
+    }
+}
 
 // ============================================================================
 // ERROR TYPE FIXTURES
@@ -186,6 +394,17 @@ pub struct ApiError {
     pub message: String,
 }
 
+impl TypeScript for ApiError {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "ApiError".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("code", TypeDef::Primitive(Primitive::String)),
+                Field::new("message", TypeDef::Primitive(Primitive::String)),
+            ])),
+        }
+    }
+}
 
 /// Detailed error with optional fields
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -196,6 +415,25 @@ pub struct DetailedError {
     pub field: Option<String>,
 }
 
+impl TypeScript for DetailedError {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "DetailedError".to_string(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("code", TypeDef::Primitive(Primitive::String)),
+                Field::new("message", TypeDef::Primitive(Primitive::String)),
+                Field::new("details", TypeDef::Union(vec![
+                    TypeDef::Primitive(Primitive::String),
+                    TypeDef::Primitive(Primitive::Null),
+                ])),
+                Field::new("field", TypeDef::Union(vec![
+                    TypeDef::Primitive(Primitive::String),
+                    TypeDef::Primitive(Primitive::Null),
+                ])),
+            ])),
+        }
+    }
+}
 
 /// Error enum
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -207,6 +445,34 @@ pub enum RpcError {
     Internal,
 }
 
+impl TypeScript for RpcError {
+    fn typescript() -> TypeDef {
+        TypeDef::Named {
+            name: "RpcError".to_string(),
+            def: Box::new(TypeDef::Union(vec![
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("NotFound".to_string()))),
+                    Field::new("resource", TypeDef::Primitive(Primitive::String)),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Unauthorized".to_string()))),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Forbidden".to_string()))),
+                    Field::new("reason", TypeDef::Primitive(Primitive::String)),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("BadRequest".to_string()))),
+                    Field::new("field", TypeDef::Primitive(Primitive::String)),
+                    Field::new("message", TypeDef::Primitive(Primitive::String)),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Internal".to_string()))),
+                ]),
+            ])),
+        }
+    }
+}
 
 // ============================================================================
 // COMPLEX NESTED FIXTURES
@@ -223,7 +489,6 @@ pub struct Workspace {
     pub status: Status,
 }
 
-
 /// Type with all common patterns
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CompleteExample {
@@ -238,7 +503,6 @@ pub struct CompleteExample {
     pub status: Status,
 }
 
-
 // ============================================================================
 // TESTS
 // ============================================================================
@@ -246,6 +510,18 @@ pub struct CompleteExample {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_point_typescript() {
+        let td = Point::typescript();
+        assert_eq!(td.render(), "Point");
+    }
+
+    #[test]
+    fn test_status_typescript() {
+        let td = Status::typescript();
+        assert_eq!(td.render(), "Status");
+    }
 
     // ========================================================================
     // ROUNDTRIP SERIALIZATION TESTS
@@ -858,4 +1134,36 @@ mod derive_tests {
         );
     }
 
+    // Compare derived vs manual implementations
+    #[test]
+    fn test_derived_matches_manual_status() {
+        assert_eq!(
+            inner_def(DerivedStatus::typescript()).render(),
+            inner_def(Status::typescript()).render()
+        );
+    }
+
+    #[test]
+    fn test_derived_matches_manual_coordinate() {
+        assert_eq!(
+            inner_def(DerivedCoordinate::typescript()).render(),
+            inner_def(Coordinate::typescript()).render()
+        );
+    }
+
+    #[test]
+    fn test_derived_matches_manual_message() {
+        assert_eq!(
+            inner_def(DerivedMessage::typescript()).render(),
+            inner_def(Message::typescript()).render()
+        );
+    }
+
+    #[test]
+    fn test_derived_matches_manual_rpc_error() {
+        assert_eq!(
+            inner_def(DerivedRpcError::typescript()).render(),
+            inner_def(RpcError::typescript()).render()
+        );
+    }
 }

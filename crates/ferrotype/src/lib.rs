@@ -826,7 +826,7 @@ mod tests {
     use super::*;
 
     // ========================================================================
-    // NEW TypeScript TRAIT + TypeDef TESTS
+    // TypeScript TRAIT + TypeDef TESTS
     // ========================================================================
 
     #[test]
@@ -1103,28 +1103,38 @@ mod tests {
     fn test_registry_extracts_nested_types() {
         let mut registry = TypeRegistry::new();
 
-        // Post type that references User type
-        let user_type = TypeDef::Named {
+        // UserId type (no dependencies)
+        let user_id = TypeDef::Named {
+            name: "UserId".to_string(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+        };
+
+        // User type depends on UserId via Ref
+        let user = TypeDef::Named {
             name: "User".to_string(),
             def: Box::new(TypeDef::Object(vec![
-                Field::new("id", TypeDef::Primitive(Primitive::String)),
+                Field::new("id", TypeDef::Ref("UserId".to_string())),
+                Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
         };
 
+        // Post type that references User type
         let post_type = TypeDef::Named {
             name: "Post".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("title", TypeDef::Primitive(Primitive::String)),
-                Field::new("author", user_type),
+                Field::new("author", user),
             ])),
         };
 
         registry.add_typedef(post_type);
+        registry.add_typedef(user_id);
 
-        // Should have both Post and User
-        assert_eq!(registry.len(), 2);
+        // Should have Post, User, and UserId
+        assert_eq!(registry.len(), 3);
         assert!(registry.get("Post").is_some());
         assert!(registry.get("User").is_some());
+        assert!(registry.get("UserId").is_some());
     }
 
     #[test]
