@@ -143,6 +143,30 @@ pub enum TypeDef {
         base: String,
         args: Vec<TypeDef>,
     },
+
+    /// A template literal type: `` `prefix${Type}suffix` ``
+    ///
+    /// Template literal types enable compile-time string pattern validation in TypeScript.
+    /// They're commonly used for branded IDs like `vm-${string}` or version patterns.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // `vm-${string}` validates that strings start with "vm-"
+    /// let vm_id = TypeDef::TemplateLiteral {
+    ///     strings: vec!["vm-".into(), "".into()],
+    ///     types: vec![Box::new(TypeDef::Primitive(Primitive::String))],
+    /// };
+    /// assert_eq!(vm_id.render(), "`vm-${string}`");
+    /// ```
+    TemplateLiteral {
+        /// String parts interspersed with type placeholders.
+        /// Always has one more element than `types`.
+        /// e.g., "vm-" + ${string} + "" becomes ["vm-", ""]
+        strings: Vec<String>,
+        /// Types to interpolate (one fewer than strings).
+        types: Vec<Box<TypeDef>>,
+    },
 }
 
 /// Primitive TypeScript types.
@@ -282,6 +306,21 @@ impl TypeDef {
             TypeDef::Generic { base, args } => {
                 let args_str: Vec<_> = args.iter().map(|t| t.render()).collect();
                 format!("{}<{}>", base, args_str.join(", "))
+            }
+            TypeDef::TemplateLiteral { strings, types } => {
+                let mut result = String::from("`");
+                for (i, s) in strings.iter().enumerate() {
+                    // Escape backticks and backslashes in template literal strings
+                    let escaped = s.replace('\\', "\\\\").replace('`', "\\`");
+                    result.push_str(&escaped);
+                    if i < types.len() {
+                        result.push_str("${");
+                        result.push_str(&types[i].render());
+                        result.push('}');
+                    }
+                }
+                result.push('`');
+                result
             }
         }
     }
@@ -517,6 +556,11 @@ impl TypeRegistry {
                     self.extract_named_types(arg);
                 }
             }
+            TypeDef::TemplateLiteral { types, .. } => {
+                for ty in types {
+                    self.extract_named_types(ty);
+                }
+            }
             // Primitives, Refs, and Literals have no nested named types
             TypeDef::Primitive(_) | TypeDef::Ref(_) | TypeDef::Literal(_) => {}
         }
@@ -595,6 +639,11 @@ impl TypeRegistry {
             TypeDef::Generic { args, .. } => {
                 for arg in args {
                     self.collect_dependencies(arg, deps);
+                }
+            }
+            TypeDef::TemplateLiteral { types, .. } => {
+                for ty in types {
+                    self.collect_dependencies(ty, deps);
                 }
             }
             TypeDef::Primitive(_) | TypeDef::Literal(_) => {}
@@ -1086,6 +1135,75 @@ mod tests {
             ],
         };
         assert_eq!(multi_generic.render(), "Map<string, number>");
+    }
+
+    #[test]
+    fn test_typedef_template_literal_render() {
+        // Simple pattern: `vm-${string}`
+        let vm_id = TypeDef::TemplateLiteral {
+            strings: vec!["vm-".into(), "".into()],
+            types: vec![Box::new(TypeDef::Primitive(Primitive::String))],
+        };
+        assert_eq!(vm_id.render(), "`vm-${string}`");
+
+        // Multiple placeholders: `v${number}.${number}.${number}`
+        let semver = TypeDef::TemplateLiteral {
+            strings: vec!["v".into(), ".".into(), ".".into(), "".into()],
+            types: vec![
+                Box::new(TypeDef::Primitive(Primitive::Number)),
+                Box::new(TypeDef::Primitive(Primitive::Number)),
+                Box::new(TypeDef::Primitive(Primitive::Number)),
+            ],
+        };
+        assert_eq!(semver.render(), "`v${number}.${number}.${number}`");
+
+        // API route pattern: `/api/${string}`
+        let api_route = TypeDef::TemplateLiteral {
+            strings: vec!["/api/".into(), "".into()],
+            types: vec![Box::new(TypeDef::Primitive(Primitive::String))],
+        };
+        assert_eq!(api_route.render(), "`/api/${string}`");
+
+        // Prefix and suffix: `user-${string}-id`
+        let complex_id = TypeDef::TemplateLiteral {
+            strings: vec!["user-".into(), "-id".into()],
+            types: vec![Box::new(TypeDef::Primitive(Primitive::String))],
+        };
+        assert_eq!(complex_id.render(), "`user-${string}-id`");
+
+        // No placeholders (just a string)
+        let static_str = TypeDef::TemplateLiteral {
+            strings: vec!["static-value".into()],
+            types: vec![],
+        };
+        assert_eq!(static_str.render(), "`static-value`");
+    }
+
+    #[test]
+    fn test_typedef_template_literal_escaping() {
+        // Test escaping backticks
+        let with_backtick = TypeDef::TemplateLiteral {
+            strings: vec!["code: `".into(), "`".into()],
+            types: vec![Box::new(TypeDef::Primitive(Primitive::String))],
+        };
+        assert_eq!(with_backtick.render(), "`code: \\`${string}\\``");
+
+        // Test escaping backslashes
+        let with_backslash = TypeDef::TemplateLiteral {
+            strings: vec!["path\\to\\".into(), "".into()],
+            types: vec![Box::new(TypeDef::Primitive(Primitive::String))],
+        };
+        assert_eq!(with_backslash.render(), "`path\\\\to\\\\${string}`");
+    }
+
+    #[test]
+    fn test_typedef_template_literal_with_refs() {
+        // Template literal with type reference
+        let typed_id = TypeDef::TemplateLiteral {
+            strings: vec!["vm-".into(), "".into()],
+            types: vec![Box::new(TypeDef::Ref("VmIdSuffix".into()))],
+        };
+        assert_eq!(typed_id.render(), "`vm-${VmIdSuffix}`");
     }
 
     #[test]
