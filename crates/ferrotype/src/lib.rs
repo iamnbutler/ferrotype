@@ -13,7 +13,7 @@
 //! - Deduplicated for cleaner output
 //! - Extended for additional targets
 
-pub use ferrotype_derive::TypeScript;
+pub use ferro_type_derive::TypeScript;
 
 use std::collections::HashMap;
 

@@ -376,12 +376,12 @@ fn generate_enum_typedef(
             let variant_attrs = FieldAttrs::from_attrs(&v.attrs)?;
             let name = get_field_name(&v.ident.to_string(), &variant_attrs, container_attrs);
             variant_exprs.push(
-                quote! { ferrotype::TypeDef::Literal(ferrotype::Literal::String(#name.to_string())) }
+                quote! { ferro_type::TypeDef::Literal(ferro_type::Literal::String(#name.to_string())) }
             );
         }
 
         Ok(quote! {
-            ferrotype::TypeDef::Union(vec![#(#variant_exprs),*])
+            ferro_type::TypeDef::Union(vec![#(#variant_exprs),*])
         })
     } else {
         // Generate discriminated union with tag field
@@ -399,10 +399,10 @@ fn generate_enum_typedef(
                 Fields::Unit => {
                     // { [tag]: "VariantName" }
                     quote! {
-                        ferrotype::TypeDef::Object(vec![
-                            ferrotype::Field::new(
+                        ferro_type::TypeDef::Object(vec![
+                            ferro_type::Field::new(
                                 #tag_name,
-                                ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                ferro_type::TypeDef::Literal(ferro_type::Literal::String(#variant_name_str.to_string()))
                             )
                         ])
                     }
@@ -419,15 +419,15 @@ fn generate_enum_typedef(
                                 .iter()
                                 .map(|f| type_to_typedef(&f.ty))
                                 .collect();
-                            quote! { ferrotype::TypeDef::Tuple(vec![#(#field_exprs),*]) }
+                            quote! { ferro_type::TypeDef::Tuple(vec![#(#field_exprs),*]) }
                         };
                         quote! {
-                            ferrotype::TypeDef::Object(vec![
-                                ferrotype::Field::new(
+                            ferro_type::TypeDef::Object(vec![
+                                ferro_type::Field::new(
                                     #tag_name,
-                                    ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                    ferro_type::TypeDef::Literal(ferro_type::Literal::String(#variant_name_str.to_string()))
                                 ),
-                                ferrotype::Field::new(#content, #content_type)
+                                ferro_type::Field::new(#content, #content_type)
                             ])
                         }
                     } else if fields.unnamed.len() == 1 {
@@ -435,12 +435,12 @@ fn generate_enum_typedef(
                         let field_type = &fields.unnamed.first().unwrap().ty;
                         let type_expr = type_to_typedef(field_type);
                         quote! {
-                            ferrotype::TypeDef::Object(vec![
-                                ferrotype::Field::new(
+                            ferro_type::TypeDef::Object(vec![
+                                ferro_type::Field::new(
                                     #tag_name,
-                                    ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                    ferro_type::TypeDef::Literal(ferro_type::Literal::String(#variant_name_str.to_string()))
                                 ),
-                                ferrotype::Field::new("value", #type_expr)
+                                ferro_type::Field::new("value", #type_expr)
                             ])
                         }
                     } else {
@@ -451,14 +451,14 @@ fn generate_enum_typedef(
                             .map(|f| type_to_typedef(&f.ty))
                             .collect();
                         quote! {
-                            ferrotype::TypeDef::Object(vec![
-                                ferrotype::Field::new(
+                            ferro_type::TypeDef::Object(vec![
+                                ferro_type::Field::new(
                                     #tag_name,
-                                    ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                    ferro_type::TypeDef::Literal(ferro_type::Literal::String(#variant_name_str.to_string()))
                                 ),
-                                ferrotype::Field::new(
+                                ferro_type::Field::new(
                                     "value",
-                                    ferrotype::TypeDef::Tuple(vec![#(#field_exprs),*])
+                                    ferro_type::TypeDef::Tuple(vec![#(#field_exprs),*])
                                 )
                             ])
                         }
@@ -476,32 +476,32 @@ fn generate_enum_typedef(
                         let field_type = &f.ty;
                         let type_expr = type_to_typedef(field_type);
                         field_exprs.push(quote! {
-                            ferrotype::Field::new(#field_name, #type_expr)
+                            ferro_type::Field::new(#field_name, #type_expr)
                         });
                     }
 
                     if let Some(content) = content_name {
                         // Adjacent tagging: { [tag]: "Variant", [content]: { fields... } }
                         quote! {
-                            ferrotype::TypeDef::Object(vec![
-                                ferrotype::Field::new(
+                            ferro_type::TypeDef::Object(vec![
+                                ferro_type::Field::new(
                                     #tag_name,
-                                    ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                    ferro_type::TypeDef::Literal(ferro_type::Literal::String(#variant_name_str.to_string()))
                                 ),
-                                ferrotype::Field::new(
+                                ferro_type::Field::new(
                                     #content,
-                                    ferrotype::TypeDef::Object(vec![#(#field_exprs),*])
+                                    ferro_type::TypeDef::Object(vec![#(#field_exprs),*])
                                 )
                             ])
                         }
                     } else {
                         // Internal tagging: { [tag]: "Circle"; center: Point; radius: number }
                         quote! {
-                            ferrotype::TypeDef::Object({
+                            ferro_type::TypeDef::Object({
                                 let mut fields = vec![
-                                    ferrotype::Field::new(
+                                    ferro_type::Field::new(
                                         #tag_name,
-                                        ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                        ferro_type::TypeDef::Literal(ferro_type::Literal::String(#variant_name_str.to_string()))
                                     )
                                 ];
                                 fields.extend(vec![#(#field_exprs),*]);
@@ -515,7 +515,7 @@ fn generate_enum_typedef(
         }
 
         Ok(quote! {
-            ferrotype::TypeDef::Union(vec![#(#variant_exprs),*])
+            ferro_type::TypeDef::Union(vec![#(#variant_exprs),*])
         })
     }
 }
@@ -539,7 +539,7 @@ fn generate_untagged_enum(
             Fields::Unit => {
                 // Unit variant in untagged enum becomes string literal
                 quote! {
-                    ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                    ferro_type::TypeDef::Literal(ferro_type::Literal::String(#variant_name_str.to_string()))
                 }
             }
             Fields::Unnamed(fields) => {
@@ -555,7 +555,7 @@ fn generate_untagged_enum(
                         .map(|f| type_to_typedef(&f.ty))
                         .collect();
                     quote! {
-                        ferrotype::TypeDef::Tuple(vec![#(#field_exprs),*])
+                        ferro_type::TypeDef::Tuple(vec![#(#field_exprs),*])
                     }
                 }
             }
@@ -572,11 +572,11 @@ fn generate_untagged_enum(
                     let field_type = &f.ty;
                     let type_expr = type_to_typedef(field_type);
                     field_exprs.push(quote! {
-                        ferrotype::Field::new(#field_name, #type_expr)
+                        ferro_type::Field::new(#field_name, #type_expr)
                     });
                 }
                 quote! {
-                    ferrotype::TypeDef::Object(vec![#(#field_exprs),*])
+                    ferro_type::TypeDef::Object(vec![#(#field_exprs),*])
                 }
             }
         };
@@ -584,7 +584,7 @@ fn generate_untagged_enum(
     }
 
     Ok(quote! {
-        ferrotype::TypeDef::Union(vec![#(#variant_exprs),*])
+        ferro_type::TypeDef::Union(vec![#(#variant_exprs),*])
     })
 }
 
@@ -597,7 +597,7 @@ fn generate_struct_typedef(
             // Named struct: Object with fields
             if fields.named.is_empty() {
                 // Empty struct becomes empty object
-                return Ok(quote! { ferrotype::TypeDef::Object(vec![]) });
+                return Ok(quote! { ferro_type::TypeDef::Object(vec![]) });
             }
 
             // Separate regular fields from flattened fields
@@ -617,8 +617,8 @@ fn generate_struct_typedef(
                     // For flattened fields, we extract the inner type's fields at runtime
                     flatten_exprs.push(quote! {
                         {
-                            let inner_td = <#field_type as ferrotype::TypeScript>::typescript();
-                            ferrotype::extract_object_fields(&inner_td)
+                            let inner_td = <#field_type as ferro_type::TypeScript>::typescript();
+                            ferro_type::extract_object_fields(&inner_td)
                         }
                     });
                 } else {
@@ -627,11 +627,11 @@ fn generate_struct_typedef(
 
                     // Determine the type expression
                     let type_expr = if let Some(ref type_override) = field_attrs.type_override {
-                        quote! { ferrotype::TypeDef::Ref(#type_override.to_string()) }
+                        quote! { ferro_type::TypeDef::Ref(#type_override.to_string()) }
                     } else {
                         let base_expr = type_to_typedef(field_type);
                         if field_attrs.inline {
-                            quote! { ferrotype::inline_typedef(#base_expr) }
+                            quote! { ferro_type::inline_typedef(#base_expr) }
                         } else {
                             base_expr
                         }
@@ -640,11 +640,11 @@ fn generate_struct_typedef(
                     // Create field (optional if default is set)
                     if field_attrs.default {
                         regular_field_exprs.push(quote! {
-                            ferrotype::Field::optional(#field_name, #type_expr)
+                            ferro_type::Field::optional(#field_name, #type_expr)
                         });
                     } else {
                         regular_field_exprs.push(quote! {
-                            ferrotype::Field::new(#field_name, #type_expr)
+                            ferro_type::Field::new(#field_name, #type_expr)
                         });
                     }
                 }
@@ -653,14 +653,14 @@ fn generate_struct_typedef(
             // If there are flattened fields, we need to build the vec dynamically
             if flatten_exprs.is_empty() {
                 Ok(quote! {
-                    ferrotype::TypeDef::Object(vec![#(#regular_field_exprs),*])
+                    ferro_type::TypeDef::Object(vec![#(#regular_field_exprs),*])
                 })
             } else {
                 Ok(quote! {
                     {
                         let mut fields = vec![#(#regular_field_exprs),*];
                         #(fields.extend(#flatten_exprs);)*
-                        ferrotype::TypeDef::Object(fields)
+                        ferro_type::TypeDef::Object(fields)
                     }
                 })
             }
@@ -681,13 +681,13 @@ fn generate_struct_typedef(
                     .collect();
 
                 Ok(quote! {
-                    ferrotype::TypeDef::Tuple(vec![#(#field_exprs),*])
+                    ferro_type::TypeDef::Tuple(vec![#(#field_exprs),*])
                 })
             }
         }
         syn::Fields::Unit => {
             // Unit struct becomes null
-            Ok(quote! { ferrotype::TypeDef::Primitive(ferrotype::Primitive::Null) })
+            Ok(quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Null) })
         }
     }
 }
@@ -695,7 +695,7 @@ fn generate_struct_typedef(
 /// Convert a Rust type to its TypeScript TypeDef representation.
 /// Uses TypeScript trait for types that implement it.
 fn type_to_typedef(ty: &Type) -> TokenStream2 {
-    quote! { <#ty as ferrotype::TypeScript>::typescript() }
+    quote! { <#ty as ferro_type::TypeScript>::typescript() }
 }
 
 /// Generate implementation for a transparent newtype wrapper.
@@ -723,7 +723,7 @@ fn generate_transparent_impl(
             where_clause.cloned()
         } else {
             let bounds = type_params.iter().map(|p| {
-                quote! { #p: ferrotype::TypeScript }
+                quote! { #p: ferro_type::TypeScript }
             });
 
             if let Some(existing_where) = where_clause {
@@ -736,9 +736,9 @@ fn generate_transparent_impl(
     };
 
     Ok(quote! {
-        impl #impl_generics ferrotype::TypeScript for #name #ty_generics #where_clause {
-            fn typescript() -> ferrotype::TypeDef {
-                <#inner_type as ferrotype::TypeScript>::typescript()
+        impl #impl_generics ferro_type::TypeScript for #name #ty_generics #where_clause {
+            fn typescript() -> ferro_type::TypeDef {
+                <#inner_type as ferro_type::TypeScript>::typescript()
             }
         }
     })
@@ -768,7 +768,7 @@ fn generate_impl(
             where_clause.cloned()
         } else {
             let bounds = type_params.iter().map(|p| {
-                quote! { #p: ferrotype::TypeScript }
+                quote! { #p: ferro_type::TypeScript }
             });
 
             if let Some(existing_where) = where_clause {
@@ -781,9 +781,9 @@ fn generate_impl(
     };
 
     Ok(quote! {
-        impl #impl_generics ferrotype::TypeScript for #name #ty_generics #where_clause {
-            fn typescript() -> ferrotype::TypeDef {
-                ferrotype::TypeDef::Named {
+        impl #impl_generics ferro_type::TypeScript for #name #ty_generics #where_clause {
+            fn typescript() -> ferro_type::TypeDef {
+                ferro_type::TypeDef::Named {
                     name: #name_str.to_string(),
                     def: Box::new(#typedef_expr),
                 }

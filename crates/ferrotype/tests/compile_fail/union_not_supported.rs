@@ -1,6 +1,6 @@
 //! Test that TypeScript derive fails on union types
 
-use ferrotype::TypeScript;
+use ferro_type::TypeScript;
 
 #[derive(TypeScript)]
 union MyUnion {

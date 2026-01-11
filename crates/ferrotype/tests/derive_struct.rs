@@ -1,6 +1,6 @@
 //! Tests for #[derive(TypeScript)] on structs
 
-use ferrotype::{TypeScript, TypeDef};
+use ferro_type::{TypeScript, TypeDef};
 
 /// Helper to get the inner definition from a Named TypeDef
 fn inner_def(td: TypeDef) -> TypeDef {

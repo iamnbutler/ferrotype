@@ -1,6 +1,6 @@
 //! Test that TypeScript derive fails on empty enums
 
-use ferrotype::TypeScript;
+use ferro_type::TypeScript;
 
 #[derive(TypeScript)]
 enum Empty {}

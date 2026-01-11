@@ -9,7 +9,7 @@
 //! Test with: curl http://localhost:3000/rpc/hello
 
 use axum::{routing::get, Json, Router};
-use ferrotype::TypeScript;
+use ferro_type::TypeScript;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};

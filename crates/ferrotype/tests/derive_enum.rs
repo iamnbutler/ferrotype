@@ -3,7 +3,7 @@
 //! These tests verify that the derive macro generates correct TypeScript
 //! discriminated union types for various enum patterns.
 
-use ferrotype::{TypeScript, TypeDef, Primitive};
+use ferro_type::{TypeScript, TypeDef, Primitive};
 
 /// Helper to get the inner definition from a Named TypeDef
 fn inner_def(td: TypeDef) -> TypeDef {

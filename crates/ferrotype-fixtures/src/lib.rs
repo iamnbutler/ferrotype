@@ -4,8 +4,8 @@
 //! These fixtures cover the full range of type patterns that
 //! ferrotype must handle correctly.
 
-use ferrotype::{Field, Primitive, TypeDef, TypeScript};
-use ferrotype_derive::TypeScript as DeriveTypeScript;
+use ferro_type::{Field, Primitive, TypeDef, TypeScript};
+use ferro_type_derive::TypeScript as DeriveTypeScript;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -204,10 +204,10 @@ impl TypeScript for Status {
         TypeDef::Named {
             name: "Status".to_string(),
             def: Box::new(TypeDef::Union(vec![
-                TypeDef::Literal(ferrotype::Literal::String("Pending".to_string())),
-                TypeDef::Literal(ferrotype::Literal::String("Active".to_string())),
-                TypeDef::Literal(ferrotype::Literal::String("Completed".to_string())),
-                TypeDef::Literal(ferrotype::Literal::String("Failed".to_string())),
+                TypeDef::Literal(ferro_type::Literal::String("Pending".to_string())),
+                TypeDef::Literal(ferro_type::Literal::String("Active".to_string())),
+                TypeDef::Literal(ferro_type::Literal::String("Completed".to_string())),
+                TypeDef::Literal(ferro_type::Literal::String("Failed".to_string())),
             ])),
         }
     }
@@ -226,14 +226,14 @@ impl TypeScript for Coordinate {
             name: "Coordinate".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("D2".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("D2".to_string()))),
                     Field::new("value", TypeDef::Tuple(vec![
                         TypeDef::Primitive(Primitive::Number),
                         TypeDef::Primitive(Primitive::Number),
                     ])),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("D3".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("D3".to_string()))),
                     Field::new("value", TypeDef::Tuple(vec![
                         TypeDef::Primitive(Primitive::Number),
                         TypeDef::Primitive(Primitive::Number),
@@ -268,18 +268,18 @@ impl TypeScript for Message {
             name: "Message".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Ping".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Ping".to_string()))),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Text".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Text".to_string()))),
                     Field::new("value", TypeDef::Primitive(Primitive::String)),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Binary".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Binary".to_string()))),
                     Field::new("value", TypeDef::Array(Box::new(TypeDef::Primitive(Primitive::Number)))),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Error".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Error".to_string()))),
                     Field::new("code", TypeDef::Primitive(Primitive::Number)),
                     Field::new("message", TypeDef::Primitive(Primitive::String)),
                 ]),
@@ -451,23 +451,23 @@ impl TypeScript for RpcError {
             name: "RpcError".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("NotFound".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("NotFound".to_string()))),
                     Field::new("resource", TypeDef::Primitive(Primitive::String)),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Unauthorized".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Unauthorized".to_string()))),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Forbidden".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Forbidden".to_string()))),
                     Field::new("reason", TypeDef::Primitive(Primitive::String)),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("BadRequest".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("BadRequest".to_string()))),
                     Field::new("field", TypeDef::Primitive(Primitive::String)),
                     Field::new("message", TypeDef::Primitive(Primitive::String)),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferrotype::Literal::String("Internal".to_string()))),
+                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Internal".to_string()))),
                 ]),
             ])),
         }
