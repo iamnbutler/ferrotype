@@ -119,6 +119,12 @@ struct ContainerAttrs {
     rename_all: Option<RenameAll>,
     /// Make newtype structs transparent (use inner type directly)
     transparent: bool,
+    /// Custom tag field name for enums (default: "type")
+    tag: Option<String>,
+    /// Content field name for adjacently tagged enums
+    content: Option<String>,
+    /// Generate untagged union (no discriminant)
+    untagged: bool,
 }
 
 impl ContainerAttrs {
@@ -151,6 +157,14 @@ impl ContainerAttrs {
                     }
                 } else if meta.path.is_ident("transparent") {
                     result.transparent = true;
+                } else if meta.path.is_ident("tag") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.tag = Some(value.value());
+                } else if meta.path.is_ident("content") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.content = Some(value.value());
+                } else if meta.path.is_ident("untagged") {
+                    result.untagged = true;
                 }
                 Ok(())
             })?;
@@ -344,6 +358,17 @@ fn generate_enum_typedef(
     // Check if all variants are unit variants (for string literal union type)
     let all_unit = variants.iter().all(|v| matches!(v.fields, Fields::Unit));
 
+    // Handle untagged enums: generate plain union without discriminant
+    if container_attrs.untagged {
+        return generate_untagged_enum(variants, container_attrs);
+    }
+
+    // Get tag field name (default: "type")
+    let tag_name = container_attrs.tag.as_deref().unwrap_or("type");
+
+    // Check if using adjacent tagging (content field specified)
+    let content_name = container_attrs.content.as_deref();
+
     if all_unit {
         // Generate string literal union: "Pending" | "Active" | "Completed"
         let mut variant_exprs: Vec<TokenStream2> = Vec::new();
@@ -359,7 +384,7 @@ fn generate_enum_typedef(
             ferrotype::TypeDef::Union(vec![#(#variant_exprs),*])
         })
     } else {
-        // Generate discriminated union with type field
+        // Generate discriminated union with tag field
         let mut variant_exprs: Vec<TokenStream2> = Vec::new();
 
         for variant in variants.iter() {
@@ -372,32 +397,54 @@ fn generate_enum_typedef(
 
             let expr = match &variant.fields {
                 Fields::Unit => {
-                    // { type: "VariantName" }
+                    // { [tag]: "VariantName" }
                     quote! {
                         ferrotype::TypeDef::Object(vec![
                             ferrotype::Field::new(
-                                "type",
+                                #tag_name,
                                 ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
                             )
                         ])
                     }
                 }
                 Fields::Unnamed(fields) => {
-                    if fields.unnamed.len() == 1 {
-                        // Newtype variant: { type: "Text"; value: T }
+                    if let Some(content) = content_name {
+                        // Adjacent tagging: { [tag]: "Variant", [content]: data }
+                        let content_type = if fields.unnamed.len() == 1 {
+                            let field_type = &fields.unnamed.first().unwrap().ty;
+                            type_to_typedef(field_type)
+                        } else {
+                            let field_exprs: Vec<TokenStream2> = fields
+                                .unnamed
+                                .iter()
+                                .map(|f| type_to_typedef(&f.ty))
+                                .collect();
+                            quote! { ferrotype::TypeDef::Tuple(vec![#(#field_exprs),*]) }
+                        };
+                        quote! {
+                            ferrotype::TypeDef::Object(vec![
+                                ferrotype::Field::new(
+                                    #tag_name,
+                                    ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                ),
+                                ferrotype::Field::new(#content, #content_type)
+                            ])
+                        }
+                    } else if fields.unnamed.len() == 1 {
+                        // Newtype variant (internal tagging): { [tag]: "Text"; value: T }
                         let field_type = &fields.unnamed.first().unwrap().ty;
                         let type_expr = type_to_typedef(field_type);
                         quote! {
                             ferrotype::TypeDef::Object(vec![
                                 ferrotype::Field::new(
-                                    "type",
+                                    #tag_name,
                                     ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
                                 ),
                                 ferrotype::Field::new("value", #type_expr)
                             ])
                         }
                     } else {
-                        // Tuple variant: { type: "D2"; value: [T1, T2] }
+                        // Tuple variant (internal tagging): { [tag]: "D2"; value: [T1, T2] }
                         let field_exprs: Vec<TokenStream2> = fields
                             .unnamed
                             .iter()
@@ -406,7 +453,7 @@ fn generate_enum_typedef(
                         quote! {
                             ferrotype::TypeDef::Object(vec![
                                 ferrotype::Field::new(
-                                    "type",
+                                    #tag_name,
                                     ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
                                 ),
                                 ferrotype::Field::new(
@@ -418,13 +465,9 @@ fn generate_enum_typedef(
                     }
                 }
                 Fields::Named(fields) => {
-                    // { type: "Circle"; center: Point; radius: number }
-                    // Note: for struct variant fields, we don't apply rename_all from container
-                    // (that's for variant names). Field renames are explicit only.
                     let mut field_exprs: Vec<TokenStream2> = Vec::new();
                     for f in fields.named.iter() {
                         let field_attrs = FieldAttrs::from_attrs(&f.attrs)?;
-                        // Skip fields marked with #[ts(skip)]
                         if field_attrs.skip {
                             continue;
                         }
@@ -437,17 +480,34 @@ fn generate_enum_typedef(
                         });
                     }
 
-                    quote! {
-                        ferrotype::TypeDef::Object({
-                            let mut fields = vec![
+                    if let Some(content) = content_name {
+                        // Adjacent tagging: { [tag]: "Variant", [content]: { fields... } }
+                        quote! {
+                            ferrotype::TypeDef::Object(vec![
                                 ferrotype::Field::new(
-                                    "type",
+                                    #tag_name,
                                     ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                ),
+                                ferrotype::Field::new(
+                                    #content,
+                                    ferrotype::TypeDef::Object(vec![#(#field_exprs),*])
                                 )
-                            ];
-                            fields.extend(vec![#(#field_exprs),*]);
-                            fields
-                        })
+                            ])
+                        }
+                    } else {
+                        // Internal tagging: { [tag]: "Circle"; center: Point; radius: number }
+                        quote! {
+                            ferrotype::TypeDef::Object({
+                                let mut fields = vec![
+                                    ferrotype::Field::new(
+                                        #tag_name,
+                                        ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                                    )
+                                ];
+                                fields.extend(vec![#(#field_exprs),*]);
+                                fields
+                            })
+                        }
                     }
                 }
             };
@@ -458,6 +518,74 @@ fn generate_enum_typedef(
             ferrotype::TypeDef::Union(vec![#(#variant_exprs),*])
         })
     }
+}
+
+/// Generate untagged enum: plain union without discriminant fields
+fn generate_untagged_enum(
+    variants: &syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
+    container_attrs: &ContainerAttrs,
+) -> syn::Result<TokenStream2> {
+    let mut variant_exprs: Vec<TokenStream2> = Vec::new();
+
+    for variant in variants.iter() {
+        let variant_attrs = FieldAttrs::from_attrs(&variant.attrs)?;
+        let variant_name_str = get_field_name(
+            &variant.ident.to_string(),
+            &variant_attrs,
+            container_attrs,
+        );
+
+        let expr = match &variant.fields {
+            Fields::Unit => {
+                // Unit variant in untagged enum becomes string literal
+                quote! {
+                    ferrotype::TypeDef::Literal(ferrotype::Literal::String(#variant_name_str.to_string()))
+                }
+            }
+            Fields::Unnamed(fields) => {
+                if fields.unnamed.len() == 1 {
+                    // Newtype: just the inner type
+                    let field_type = &fields.unnamed.first().unwrap().ty;
+                    type_to_typedef(field_type)
+                } else {
+                    // Tuple: [T1, T2, ...]
+                    let field_exprs: Vec<TokenStream2> = fields
+                        .unnamed
+                        .iter()
+                        .map(|f| type_to_typedef(&f.ty))
+                        .collect();
+                    quote! {
+                        ferrotype::TypeDef::Tuple(vec![#(#field_exprs),*])
+                    }
+                }
+            }
+            Fields::Named(fields) => {
+                // Struct variant: { field1: T1, field2: T2 }
+                let mut field_exprs: Vec<TokenStream2> = Vec::new();
+                for f in fields.named.iter() {
+                    let field_attrs = FieldAttrs::from_attrs(&f.attrs)?;
+                    if field_attrs.skip {
+                        continue;
+                    }
+                    let original_name = f.ident.as_ref().unwrap().to_string();
+                    let field_name = field_attrs.rename.clone().unwrap_or(original_name);
+                    let field_type = &f.ty;
+                    let type_expr = type_to_typedef(field_type);
+                    field_exprs.push(quote! {
+                        ferrotype::Field::new(#field_name, #type_expr)
+                    });
+                }
+                quote! {
+                    ferrotype::TypeDef::Object(vec![#(#field_exprs),*])
+                }
+            }
+        };
+        variant_exprs.push(expr);
+    }
+
+    Ok(quote! {
+        ferrotype::TypeDef::Union(vec![#(#variant_exprs),*])
+    })
 }
 
 fn generate_struct_typedef(

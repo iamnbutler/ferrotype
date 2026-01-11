@@ -349,3 +349,192 @@ fn test_enum_variant_field_skip() {
     // Should NOT include skipped field
     assert!(!rendered.contains("internal_trace"));
 }
+
+// ============================================================================
+// TAG ATTRIBUTE TESTS - #[ts(tag = "...")]
+// ============================================================================
+
+#[derive(TypeScript)]
+#[ts(tag = "kind")]
+enum CustomTagEnum {
+    Ping,
+    Text(String),
+    Error { code: i32, message: String },
+}
+
+#[test]
+fn test_custom_tag_field_name() {
+    let td = CustomTagEnum::typescript();
+    let rendered = inner_def(td).render();
+    // Should use "kind" instead of "type"
+    assert!(rendered.contains(r#"kind: "Ping""#));
+    assert!(rendered.contains(r#"kind: "Text""#));
+    assert!(rendered.contains(r#"kind: "Error""#));
+    // Should NOT use "type"
+    assert!(!rendered.contains(r#"type: "#));
+}
+
+#[derive(TypeScript)]
+#[ts(tag = "t")]
+enum ShortTagEnum {
+    A,
+    B(i32),
+}
+
+#[test]
+fn test_short_tag_name() {
+    let td = ShortTagEnum::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains(r#"t: "A""#));
+    assert!(rendered.contains(r#"t: "B""#));
+}
+
+// ============================================================================
+// CONTENT ATTRIBUTE TESTS - #[ts(content = "...")]
+// ============================================================================
+
+#[derive(TypeScript)]
+#[ts(tag = "t", content = "c")]
+enum AdjacentTaggedEnum {
+    Text(String),
+    Number(i32),
+    Tuple(i32, i32),
+}
+
+#[test]
+fn test_adjacent_tagging_newtype() {
+    let td = AdjacentTaggedEnum::typescript();
+    let rendered = inner_def(td).render();
+    // Adjacent tagging: { t: "Variant", c: data }
+    assert!(rendered.contains(r#"{ t: "Text"; c: string }"#));
+    assert!(rendered.contains(r#"{ t: "Number"; c: number }"#));
+    assert!(rendered.contains(r#"{ t: "Tuple"; c: [number, number] }"#));
+}
+
+#[derive(TypeScript)]
+#[ts(tag = "tag", content = "data")]
+enum AdjacentStructVariant {
+    Error { code: i32, message: String },
+    Info { text: String },
+}
+
+#[test]
+fn test_adjacent_tagging_struct_variant() {
+    let td = AdjacentStructVariant::typescript();
+    let rendered = inner_def(td).render();
+    // Struct variants get nested object in content field
+    assert!(rendered.contains(r#"{ tag: "Error"; data: { code: number; message: string } }"#));
+    assert!(rendered.contains(r#"{ tag: "Info"; data: { text: string } }"#));
+}
+
+#[derive(TypeScript)]
+#[ts(tag = "kind", content = "value")]
+enum AdjacentMixedVariants {
+    Ping,
+    Text(String),
+    Coords(f64, f64),
+    Data { x: i32 },
+}
+
+#[test]
+fn test_adjacent_tagging_mixed_variants() {
+    let td = AdjacentMixedVariants::typescript();
+    let rendered = inner_def(td).render();
+    // Unit variant: just the tag, no content
+    assert!(rendered.contains(r#"{ kind: "Ping" }"#));
+    // Newtype variant: content is the inner type
+    assert!(rendered.contains(r#"{ kind: "Text"; value: string }"#));
+    // Tuple variant: content is a tuple
+    assert!(rendered.contains(r#"{ kind: "Coords"; value: [number, number] }"#));
+    // Struct variant: content is nested object
+    assert!(rendered.contains(r#"{ kind: "Data"; value: { x: number } }"#));
+}
+
+// ============================================================================
+// UNTAGGED ATTRIBUTE TESTS - #[ts(untagged)]
+// ============================================================================
+
+#[derive(TypeScript)]
+#[ts(untagged)]
+enum UntaggedValue {
+    Num(i32),
+    Str(String),
+    Bool(bool),
+}
+
+#[test]
+fn test_untagged_newtype_variants() {
+    let td = UntaggedValue::typescript();
+    let rendered = inner_def(td).render();
+    // Untagged: plain union of inner types
+    assert_eq!(rendered, "number | string | boolean");
+}
+
+#[derive(TypeScript)]
+#[ts(untagged)]
+enum UntaggedMixed {
+    Null,
+    Text(String),
+    Pair(i32, i32),
+    Object { name: String },
+}
+
+#[test]
+fn test_untagged_mixed_variants() {
+    let td = UntaggedMixed::typescript();
+    let rendered = inner_def(td).render();
+    // Unit variant becomes string literal
+    assert!(rendered.contains(r#""Null""#));
+    // Newtype unwraps to inner type
+    assert!(rendered.contains("string"));
+    // Tuple becomes tuple type
+    assert!(rendered.contains("[number, number]"));
+    // Struct variant becomes object type (no tag)
+    assert!(rendered.contains("{ name: string }"));
+}
+
+#[derive(TypeScript)]
+#[ts(untagged)]
+enum UntaggedUnitEnum {
+    A,
+    B,
+    C,
+}
+
+#[test]
+fn test_untagged_unit_variants() {
+    let td = UntaggedUnitEnum::typescript();
+    let rendered = inner_def(td).render();
+    // Unit variants become string literals
+    assert_eq!(rendered, r#""A" | "B" | "C""#);
+}
+
+#[derive(TypeScript)]
+#[ts(untagged, rename_all = "camelCase")]
+enum UntaggedWithRename {
+    FirstItem,
+    SecondItem(String),
+}
+
+#[test]
+fn test_untagged_with_rename_all() {
+    let td = UntaggedWithRename::typescript();
+    let rendered = inner_def(td).render();
+    // rename_all applies to unit variant name
+    assert!(rendered.contains(r#""firstItem""#));
+    // Newtype unwraps, rename doesn't affect type
+    assert!(rendered.contains("string"));
+}
+
+// ============================================================================
+// SNAPSHOT TESTS FOR NEW ATTRIBUTES
+// ============================================================================
+
+#[test]
+fn test_tag_content_untagged_snapshots() {
+    insta::assert_snapshot!("custom_tag_enum", inner_def(CustomTagEnum::typescript()).render());
+    insta::assert_snapshot!("adjacent_tagged_enum", inner_def(AdjacentTaggedEnum::typescript()).render());
+    insta::assert_snapshot!("adjacent_struct_variant", inner_def(AdjacentStructVariant::typescript()).render());
+    insta::assert_snapshot!("untagged_value", inner_def(UntaggedValue::typescript()).render());
+    insta::assert_snapshot!("untagged_mixed", inner_def(UntaggedMixed::typescript()).render());
+}

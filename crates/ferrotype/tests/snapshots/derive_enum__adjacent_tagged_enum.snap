@@ -1,0 +1,6 @@
+---
+source: crates/ferrotype/tests/derive_enum.rs
+assertion_line: 536
+expression: "inner_def(AdjacentTaggedEnum::typescript()).render()"
+---
+{ t: "Text"; c: string } | { t: "Number"; c: number } | { t: "Tuple"; c: [number, number] }
