@@ -210,6 +210,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferro-type-gen"
+version = "0.1.0"
+dependencies = [
+ "ferro-type",
+ "tempfile",
+]
+
+[[package]]
 name = "ferrotype-fixtures"
 version = "0.1.0"
 dependencies = [
