@@ -117,6 +117,8 @@ struct ContainerAttrs {
     rename: Option<String>,
     /// Rename all fields/variants
     rename_all: Option<RenameAll>,
+    /// Make newtype structs transparent (use inner type directly)
+    transparent: bool,
 }
 
 impl ContainerAttrs {
@@ -147,6 +149,8 @@ impl ContainerAttrs {
                             ),
                         ));
                     }
+                } else if meta.path.is_ident("transparent") {
+                    result.transparent = true;
                 }
                 Ok(())
             })?;
@@ -163,6 +167,14 @@ struct FieldAttrs {
     rename: Option<String>,
     /// Skip this field in the generated TypeScript
     skip: bool,
+    /// Flatten this field's type into the parent object
+    flatten: bool,
+    /// Override the TypeScript type with a custom string
+    type_override: Option<String>,
+    /// Mark this field as optional (with ?)
+    default: bool,
+    /// Inline the type definition instead of using a reference
+    inline: bool,
 }
 
 impl FieldAttrs {
@@ -180,6 +192,15 @@ impl FieldAttrs {
                     result.rename = Some(value.value());
                 } else if meta.path.is_ident("skip") {
                     result.skip = true;
+                } else if meta.path.is_ident("flatten") {
+                    result.flatten = true;
+                } else if meta.path.is_ident("type") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.type_override = Some(value.value());
+                } else if meta.path.is_ident("default") {
+                    result.default = true;
+                } else if meta.path.is_ident("inline") {
+                    result.inline = true;
                 }
                 Ok(())
             })?;
@@ -272,6 +293,20 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
             generate_impl(name, &type_name, generics, typedef)
         }
         Data::Struct(data) => {
+            // Handle transparent newtypes - they become the inner type directly
+            if container_attrs.transparent {
+                if let syn::Fields::Unnamed(fields) = &data.fields {
+                    if fields.unnamed.len() == 1 {
+                        let inner_type = &fields.unnamed.first().unwrap().ty;
+                        return generate_transparent_impl(name, inner_type, generics);
+                    }
+                }
+                return Err(syn::Error::new_spanned(
+                    input,
+                    "#[ts(transparent)] can only be used on newtype structs (single unnamed field)",
+                ));
+            }
+
             let typedef = generate_struct_typedef(&data.fields, &container_attrs)?;
             generate_impl(name, &type_name, generics, typedef)
         }
@@ -426,25 +461,70 @@ fn generate_struct_typedef(
                 return Ok(quote! { ferrotype::TypeDef::Object(vec![]) });
             }
 
-            let mut field_exprs: Vec<TokenStream2> = Vec::new();
+            // Separate regular fields from flattened fields
+            let mut regular_field_exprs: Vec<TokenStream2> = Vec::new();
+            let mut flatten_exprs: Vec<TokenStream2> = Vec::new();
+
             for f in fields.named.iter() {
                 let field_attrs = FieldAttrs::from_attrs(&f.attrs)?;
                 // Skip fields marked with #[ts(skip)]
                 if field_attrs.skip {
                     continue;
                 }
-                let original_name = f.ident.as_ref().unwrap().to_string();
-                let field_name = get_field_name(&original_name, &field_attrs, container_attrs);
+
                 let field_type = &f.ty;
-                let type_expr = type_to_typedef(field_type);
-                field_exprs.push(quote! {
-                    ferrotype::Field::new(#field_name, #type_expr)
-                });
+
+                if field_attrs.flatten {
+                    // For flattened fields, we extract the inner type's fields at runtime
+                    flatten_exprs.push(quote! {
+                        {
+                            let inner_td = <#field_type as ferrotype::TypeScript>::typescript();
+                            ferrotype::extract_object_fields(&inner_td)
+                        }
+                    });
+                } else {
+                    let original_name = f.ident.as_ref().unwrap().to_string();
+                    let field_name = get_field_name(&original_name, &field_attrs, container_attrs);
+
+                    // Determine the type expression
+                    let type_expr = if let Some(ref type_override) = field_attrs.type_override {
+                        quote! { ferrotype::TypeDef::Ref(#type_override.to_string()) }
+                    } else {
+                        let base_expr = type_to_typedef(field_type);
+                        if field_attrs.inline {
+                            quote! { ferrotype::inline_typedef(#base_expr) }
+                        } else {
+                            base_expr
+                        }
+                    };
+
+                    // Create field (optional if default is set)
+                    if field_attrs.default {
+                        regular_field_exprs.push(quote! {
+                            ferrotype::Field::optional(#field_name, #type_expr)
+                        });
+                    } else {
+                        regular_field_exprs.push(quote! {
+                            ferrotype::Field::new(#field_name, #type_expr)
+                        });
+                    }
+                }
             }
 
-            Ok(quote! {
-                ferrotype::TypeDef::Object(vec![#(#field_exprs),*])
-            })
+            // If there are flattened fields, we need to build the vec dynamically
+            if flatten_exprs.is_empty() {
+                Ok(quote! {
+                    ferrotype::TypeDef::Object(vec![#(#regular_field_exprs),*])
+                })
+            } else {
+                Ok(quote! {
+                    {
+                        let mut fields = vec![#(#regular_field_exprs),*];
+                        #(fields.extend(#flatten_exprs);)*
+                        ferrotype::TypeDef::Object(fields)
+                    }
+                })
+            }
         }
         syn::Fields::Unnamed(fields) => {
             // Tuple struct
@@ -477,6 +557,52 @@ fn generate_struct_typedef(
 /// Uses TypeScript trait for types that implement it.
 fn type_to_typedef(ty: &Type) -> TokenStream2 {
     quote! { <#ty as ferrotype::TypeScript>::typescript() }
+}
+
+/// Generate implementation for a transparent newtype wrapper.
+/// The TypeScript representation is just the inner type, not wrapped in Named.
+fn generate_transparent_impl(
+    name: &Ident,
+    inner_type: &Type,
+    generics: &Generics,
+) -> syn::Result<TokenStream2> {
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    // Add TypeScript bounds to generic parameters
+    let where_clause = if generics.params.is_empty() {
+        where_clause.cloned()
+    } else {
+        let type_params: Vec<_> = generics.params.iter().filter_map(|p| {
+            if let GenericParam::Type(tp) = p {
+                Some(&tp.ident)
+            } else {
+                None
+            }
+        }).collect();
+
+        if type_params.is_empty() {
+            where_clause.cloned()
+        } else {
+            let bounds = type_params.iter().map(|p| {
+                quote! { #p: ferrotype::TypeScript }
+            });
+
+            if let Some(existing_where) = where_clause {
+                let existing_predicates = &existing_where.predicates;
+                Some(syn::parse_quote! { where #(#bounds,)* #existing_predicates })
+            } else {
+                Some(syn::parse_quote! { where #(#bounds),* })
+            }
+        }
+    };
+
+    Ok(quote! {
+        impl #impl_generics ferrotype::TypeScript for #name #ty_generics #where_clause {
+            fn typescript() -> ferrotype::TypeDef {
+                <#inner_type as ferrotype::TypeScript>::typescript()
+            }
+        }
+    })
 }
 
 fn generate_impl(
