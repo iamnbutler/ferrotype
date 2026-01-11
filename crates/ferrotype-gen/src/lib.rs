@@ -15,14 +15,14 @@
 //!     name: String,
 //! }
 //!
-//! let mut gen = Generator::new(
+//! let mut generator = Generator::new(
 //!     Config::new()
 //!         .output("types.ts")
 //!         .export_style(ExportStyle::Named)
 //! );
 //!
-//! gen.register::<User>();
-//! gen.write().expect("Failed to write TypeScript");
+//! generator.register::<User>();
+//! generator.write().expect("Failed to write TypeScript");
 //! ```
 //!
 //! # build.rs Integration
@@ -32,14 +32,14 @@
 //! use ferro_type_gen::{Config, Generator};
 //!
 //! fn main() {
-//!     let mut gen = Generator::new(
+//!     let mut generator = Generator::new(
 //!         Config::new().output("../frontend/src/types/api.ts")
 //!     );
 //!
-//!     gen.register::<api::User>()
+//!     generator.register::<api::User>()
 //!        .register::<api::Post>();
 //!
-//!     gen.write_if_changed()
+//!     generator.write_if_changed()
 //!         .expect("TypeScript generation failed");
 //! }
 //! ```
@@ -463,9 +463,9 @@ impl Default for Generator {
 ///
 /// Returns the TypeScript definition as a string.
 pub fn generate<T: TypeScript>() -> String {
-    let mut gen = Generator::with_defaults();
-    gen.register::<T>();
-    gen.generate()
+    let mut generator = Generator::with_defaults();
+    generator.register::<T>();
+    generator.generate()
 }
 
 /// Export types from a registry to a file
@@ -512,18 +512,18 @@ mod tests {
 
     #[test]
     fn test_generator_register() {
-        let mut gen = Generator::with_defaults();
+        let mut generator = Generator::with_defaults();
 
         // Register string type (primitive, no named type added)
-        gen.register::<String>();
+        generator.register::<String>();
 
         // Registry should be empty since String doesn't create a Named type
-        assert_eq!(gen.registry().len(), 0);
+        assert_eq!(generator.registry().len(), 0);
     }
 
     #[test]
     fn test_generator_add_typedef() {
-        let mut gen = Generator::with_defaults();
+        let mut generator = Generator::with_defaults();
 
         let user_type = TypeDef::Named {
             namespace: vec![],
@@ -535,61 +535,61 @@ mod tests {
             module: None,
         };
 
-        gen.add(user_type);
+        generator.add(user_type);
 
-        assert_eq!(gen.registry().len(), 1);
-        assert!(gen.registry().get("User").is_some());
+        assert_eq!(generator.registry().len(), 1);
+        assert!(generator.registry().get("User").is_some());
     }
 
     #[test]
     fn test_generate_export_none() {
-        let mut gen = Generator::new(Config::new().export_style(ExportStyle::None));
+        let mut generator = Generator::new(Config::new().export_style(ExportStyle::None));
 
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
         });
 
-        let output = gen.generate();
+        let output = generator.generate();
         assert!(output.contains("type User = string;"));
         assert!(!output.contains("export type User"));
     }
 
     #[test]
     fn test_generate_export_named() {
-        let mut gen = Generator::new(Config::new().export_style(ExportStyle::Named));
+        let mut generator = Generator::new(Config::new().export_style(ExportStyle::Named));
 
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
         });
 
-        let output = gen.generate();
+        let output = generator.generate();
         assert!(output.contains("export type User = string;"));
     }
 
     #[test]
     fn test_generate_export_grouped() {
-        let mut gen = Generator::new(Config::new().export_style(ExportStyle::Grouped));
+        let mut generator = Generator::new(Config::new().export_style(ExportStyle::Grouped));
 
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
         });
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
         });
 
-        let output = gen.generate();
+        let output = generator.generate();
         assert!(output.contains("type User = string;"));
         assert!(output.contains("type Post = string;"));
         assert!(output.contains("export { "));
@@ -599,17 +599,17 @@ mod tests {
 
     #[test]
     fn test_generate_custom_header() {
-        let gen = Generator::new(Config::new().header("My custom header"));
+        let generator = Generator::new(Config::new().header("My custom header"));
 
-        let output = gen.generate();
+        let output = generator.generate();
         assert!(output.starts_with("// My custom header\n"));
     }
 
     #[test]
     fn test_generate_default_header() {
-        let gen = Generator::with_defaults();
+        let generator = Generator::with_defaults();
 
-        let output = gen.generate();
+        let output = generator.generate();
         assert!(output.contains("// Generated by ferro-type-gen"));
         assert!(output.contains("// Do not edit manually"));
     }
@@ -619,15 +619,15 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let output_path = temp_dir.path().join("nested/dir/types.ts");
 
-        let mut gen = Generator::new(Config::new().output(&output_path));
-        gen.add(TypeDef::Named {
+        let mut generator = Generator::new(Config::new().output(&output_path));
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
         });
 
-        gen.write().unwrap();
+        generator.write().unwrap();
 
         assert!(output_path.exists());
         let content = std::fs::read_to_string(&output_path).unwrap();
@@ -639,8 +639,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let output_path = temp_dir.path().join("types.ts");
 
-        let mut gen = Generator::new(Config::new().output(&output_path));
-        gen.add(TypeDef::Named {
+        let mut generator = Generator::new(Config::new().output(&output_path));
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
@@ -648,13 +648,13 @@ mod tests {
         });
 
         // First write should return true (changed)
-        assert!(gen.write_if_changed().unwrap());
+        assert!(generator.write_if_changed().unwrap());
 
         // Second write should return false (unchanged)
-        assert!(!gen.write_if_changed().unwrap());
+        assert!(!generator.write_if_changed().unwrap());
 
         // Add another type
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
@@ -662,13 +662,13 @@ mod tests {
         });
 
         // Third write should return true (changed)
-        assert!(gen.write_if_changed().unwrap());
+        assert!(generator.write_if_changed().unwrap());
     }
 
     #[test]
     fn test_write_no_output_configured() {
-        let gen = Generator::with_defaults();
-        let result = gen.write();
+        let generator = Generator::with_defaults();
+        let result = generator.write();
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
     }
@@ -722,34 +722,34 @@ mod tests {
 
     #[test]
     fn test_types_by_module() {
-        let mut gen = Generator::with_defaults();
+        let mut generator = Generator::with_defaults();
 
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
         });
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
         });
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Request".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::api".to_string()),
         });
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Orphan".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
         });
 
-        let by_module = gen.types_by_module();
+        let by_module = generator.types_by_module();
 
         assert_eq!(by_module.len(), 3);
         assert!(by_module.get("my_crate::models").unwrap().contains(&"User".to_string()));
@@ -760,22 +760,22 @@ mod tests {
 
     #[test]
     fn test_generate_for_module() {
-        let mut gen = Generator::with_defaults();
+        let mut generator = Generator::with_defaults();
 
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
         });
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
             module: Some("my_crate::models".to_string()),
         });
 
-        let output = gen.generate_for_module("my_crate::models", &["User".to_string(), "Post".to_string()]);
+        let output = generator.generate_for_module("my_crate::models", &["User".to_string(), "Post".to_string()]);
 
         assert!(output.contains("// Module: my_crate::models"));
         assert!(output.contains("export type User = string;"));
@@ -786,22 +786,22 @@ mod tests {
     fn test_write_multi_file() {
         let temp_dir = tempfile::tempdir().unwrap();
 
-        let mut gen = Generator::with_defaults();
+        let mut generator = Generator::with_defaults();
 
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models::user".to_string()),
         });
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Request".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::api".to_string()),
         });
 
-        let count = gen.write_multi_file(temp_dir.path()).unwrap();
+        let count = generator.write_multi_file(temp_dir.path()).unwrap();
         assert_eq!(count, 2);
 
         // Check files exist
@@ -823,8 +823,8 @@ mod tests {
     fn test_write_multi_file_if_changed() {
         let temp_dir = tempfile::tempdir().unwrap();
 
-        let mut gen = Generator::with_defaults();
-        gen.add(TypeDef::Named {
+        let mut generator = Generator::with_defaults();
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
@@ -832,15 +832,15 @@ mod tests {
         });
 
         // First write should write
-        let count1 = gen.write_multi_file_if_changed(temp_dir.path()).unwrap();
+        let count1 = generator.write_multi_file_if_changed(temp_dir.path()).unwrap();
         assert_eq!(count1, 1);
 
         // Second write should not write (unchanged)
-        let count2 = gen.write_multi_file_if_changed(temp_dir.path()).unwrap();
+        let count2 = generator.write_multi_file_if_changed(temp_dir.path()).unwrap();
         assert_eq!(count2, 0);
 
         // Add another type
-        gen.add(TypeDef::Named {
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
@@ -848,7 +848,7 @@ mod tests {
         });
 
         // Third write should write (changed)
-        let count3 = gen.write_multi_file_if_changed(temp_dir.path()).unwrap();
+        let count3 = generator.write_multi_file_if_changed(temp_dir.path()).unwrap();
         assert_eq!(count3, 1);
     }
 
@@ -856,15 +856,15 @@ mod tests {
     fn test_write_multi_file_default_module() {
         let temp_dir = tempfile::tempdir().unwrap();
 
-        let mut gen = Generator::with_defaults();
-        gen.add(TypeDef::Named {
+        let mut generator = Generator::with_defaults();
+        generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Orphan".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
         });
 
-        gen.write_multi_file(temp_dir.path()).unwrap();
+        generator.write_multi_file(temp_dir.path()).unwrap();
 
         // Types without module go to types.ts
         let types_path = temp_dir.path().join("types.ts");
