@@ -26,6 +26,11 @@ pub fn convert_module(module: &Module) -> Vec<TsTypeInfo> {
                     types.push(info);
                 }
             }
+            ModuleItem::Stmt(Stmt::Decl(Decl::TsEnum(ts_enum))) => {
+                if let Some(info) = convert_ts_enum(ts_enum) {
+                    types.push(info);
+                }
+            }
             _ => {}
         }
     }
@@ -94,6 +99,58 @@ fn convert_type_alias(alias: &TsTypeAliasDecl) -> Option<TsTypeInfo> {
             module: None,
             wrapper: None,
         }
+    };
+
+    Some(TsTypeInfo {
+        name,
+        typedef,
+        is_interface: false,
+    })
+}
+
+/// Convert a TypeScript enum declaration to TsTypeInfo.
+///
+/// TypeScript enums are converted to a union of literals, which codegen
+/// then renders as a Rust enum.
+fn convert_ts_enum(ts_enum: &TsEnumDecl) -> Option<TsTypeInfo> {
+    let name = ts_enum.id.sym.to_string();
+
+    // Collect enum variants
+    let variants: Vec<TypeDef> = ts_enum
+        .members
+        .iter()
+        .filter_map(|member| {
+            // Get the member name
+            let member_name = match &member.id {
+                TsEnumMemberId::Ident(ident) => ident.sym.to_string(),
+                TsEnumMemberId::Str(s) => s.value.as_str().unwrap_or("").to_string(),
+            };
+
+            // Check if there's an explicit initializer
+            if let Some(init) = &member.init {
+                match init.as_ref() {
+                    Expr::Lit(Lit::Str(s)) => {
+                        Some(TypeDef::Literal(Literal::String(s.value.as_str().unwrap_or("").to_string())))
+                    }
+                    Expr::Lit(Lit::Num(n)) => Some(TypeDef::Literal(Literal::Number(n.value))),
+                    _ => {
+                        // Use member name as the literal value for computed initializers
+                        Some(TypeDef::Literal(Literal::String(member_name)))
+                    }
+                }
+            } else {
+                // No initializer - use member name as string literal
+                Some(TypeDef::Literal(Literal::String(member_name)))
+            }
+        })
+        .collect();
+
+    let typedef = TypeDef::Named {
+        namespace: vec![],
+        name: name.clone(),
+        def: Box::new(TypeDef::Union(variants)),
+        module: None,
+        wrapper: None,
     };
 
     Some(TsTypeInfo {
@@ -556,5 +613,53 @@ mod tests {
 
         assert_eq!(types.len(), 1);
         assert!(matches!(&types[0].typedef, TypeDef::GenericDef { .. }));
+    }
+
+    #[test]
+    fn test_convert_ts_enum() {
+        let source = r#"
+            enum Status {
+                Active,
+                Inactive,
+                Pending
+            }
+        "#;
+        let module = parse_typescript(source).unwrap();
+        let types = convert_module(&module);
+
+        assert_eq!(types.len(), 1);
+        assert_eq!(types[0].name, "Status");
+        if let TypeDef::Named { def, .. } = &types[0].typedef {
+            if let TypeDef::Union(variants) = def.as_ref() {
+                assert_eq!(variants.len(), 3);
+                assert!(matches!(&variants[0], TypeDef::Literal(Literal::String(s)) if s == "Active"));
+            } else {
+                panic!("Expected Union typedef");
+            }
+        } else {
+            panic!("Expected Named typedef");
+        }
+    }
+
+    #[test]
+    fn test_convert_ts_enum_with_string_values() {
+        let source = r#"
+            enum Direction {
+                Up = "UP",
+                Down = "DOWN",
+                Left = "LEFT",
+                Right = "RIGHT"
+            }
+        "#;
+        let module = parse_typescript(source).unwrap();
+        let types = convert_module(&module);
+
+        assert_eq!(types.len(), 1);
+        if let TypeDef::Named { def, .. } = &types[0].typedef {
+            if let TypeDef::Union(variants) = def.as_ref() {
+                assert_eq!(variants.len(), 4);
+                assert!(matches!(&variants[0], TypeDef::Literal(Literal::String(s)) if s == "UP"));
+            }
+        }
     }
 }
