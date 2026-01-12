@@ -6,7 +6,7 @@ Rust-to-TypeScript type generation via derive macro. Generates TypeScript type d
 
 ```toml
 [dependencies]
-ferro-type = "0.1.3"
+ferro-type = "0.2.0"
 ```
 
 ## Features
@@ -118,7 +118,7 @@ let output = registry.render();
 Extend existing TypeScript types:
 
 ```rust
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(extends = "BaseEntity")]
 struct User {
     name: String,
@@ -132,7 +132,7 @@ struct User {
 Generate branded ID types:
 
 ```rust
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Order {
     #[ts(pattern = "order-${string}")]
     id: String,
@@ -145,7 +145,7 @@ struct Order {
 Reference nested type properties:
 
 ```rust
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Comment {
     #[ts(index = "User", key = "id")]
     author_id: String,
