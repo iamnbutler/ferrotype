@@ -119,13 +119,12 @@ Extend existing TypeScript types:
 
 ```rust
 #[derive(TypeScript)]
-#[ts(extends = "Claude.Todo")]
-struct Subtask {
-    #[ts(type = "UNIX")]
-    created_at: i64,
-    file_changes: Option<Vec<FileChange>>,
+#[ts(extends = "BaseEntity")]
+struct User {
+    name: String,
+    email: String,
 }
-// Renders as: type Subtask = Claude.Todo & { created_at: UNIX; ... }
+// Renders as: type User = BaseEntity & { name: string; email: string }
 ```
 
 #### Template Literals
@@ -134,11 +133,11 @@ Generate branded ID types:
 
 ```rust
 #[derive(TypeScript)]
-struct Message {
-    #[ts(pattern = "${TOPIC}::${ULID}")]
+struct Order {
+    #[ts(pattern = "order-${string}")]
     id: String,
 }
-// Renders as: id: `${TOPIC}::${ULID}`
+// Renders as: id: `order-${string}`
 ```
 
 #### Indexed Access
@@ -147,11 +146,11 @@ Reference nested type properties:
 
 ```rust
 #[derive(TypeScript)]
-struct Response {
-    #[ts(index = "Profile", key = "login")]
-    author: String,
+struct Comment {
+    #[ts(index = "User", key = "id")]
+    author_id: String,
 }
-// Renders as: author: Profile["login"]
+// Renders as: author_id: User["id"]
 ```
 
 ### Rename Conventions
