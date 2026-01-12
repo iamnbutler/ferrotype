@@ -578,6 +578,112 @@ fn test_default_with_rename() {
 }
 
 // ============================================================================
+// OPTIONAL ATTRIBUTE TESTS (field?: T instead of field: T | null)
+// ============================================================================
+
+#[derive(TS)]
+struct OptionalFieldStruct {
+    required_field: String,
+    #[ts(optional)]
+    maybe_count: Option<i32>,
+    #[ts(optional)]
+    maybe_name: Option<String>,
+}
+
+#[test]
+fn test_optional_unwraps_option() {
+    let td = OptionalFieldStruct::typescript();
+    let rendered = inner_def(td).render();
+    // required_field should be required string
+    assert!(rendered.contains("required_field: string"));
+    // optional fields should have ? but NOT | null
+    assert!(rendered.contains("maybe_count?: number"));
+    assert!(rendered.contains("maybe_name?: string"));
+    // Should NOT contain "| null" for optional fields
+    assert!(!rendered.contains("maybe_count?: number | null"));
+    assert!(!rendered.contains("maybe_name?: string | null"));
+}
+
+#[derive(TS)]
+struct MixedOptionalStruct {
+    #[ts(optional)]
+    absent_field: Option<i32>,
+    nullable_field: Option<i32>,
+}
+
+#[test]
+fn test_optional_vs_nullable() {
+    let td = MixedOptionalStruct::typescript();
+    let rendered = inner_def(td).render();
+    // #[ts(optional)] produces field?: T (absent semantics)
+    assert!(rendered.contains("absent_field?: number"));
+    // No attribute produces field: T | null (nullable semantics)
+    assert!(rendered.contains("nullable_field: number | null"));
+}
+
+#[derive(TS)]
+struct OptionalWithRename {
+    #[ts(optional, rename = "maybeValue")]
+    maybe_value: Option<String>,
+}
+
+#[test]
+fn test_optional_with_rename() {
+    let td = OptionalWithRename::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("maybeValue?: string"));
+    assert!(!rendered.contains("maybeValue?: string | null"));
+}
+
+#[derive(TS)]
+#[ts(rename_all = "camelCase")]
+struct OptionalWithRenameAll {
+    #[ts(optional)]
+    maybe_user_id: Option<i32>,
+    required_name: String,
+}
+
+#[test]
+fn test_optional_with_rename_all() {
+    let td = OptionalWithRenameAll::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("maybeUserId?: number"));
+    assert!(rendered.contains("requiredName: string"));
+}
+
+#[derive(TS)]
+struct OptionalNonOption {
+    #[ts(optional)]
+    maybe_present: String,
+}
+
+#[test]
+fn test_optional_on_non_option_type() {
+    // #[ts(optional)] on a non-Option type should still make it optional
+    let td = OptionalNonOption::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("maybe_present?: string"));
+}
+
+#[derive(TS)]
+struct BothDefaultAndOptional {
+    #[ts(default)]
+    default_field: Option<i32>,
+    #[ts(optional)]
+    optional_field: Option<i32>,
+}
+
+#[test]
+fn test_default_vs_optional_on_option() {
+    let td = BothDefaultAndOptional::typescript();
+    let rendered = inner_def(td).render();
+    // #[ts(default)] preserves Option<T> as T | null with ?
+    assert!(rendered.contains("default_field?: number | null"));
+    // #[ts(optional)] unwraps Option<T> to T with ?
+    assert!(rendered.contains("optional_field?: number"));
+}
+
+// ============================================================================
 // INLINE ATTRIBUTE TESTS
 // ============================================================================
 
