@@ -30,6 +30,7 @@ impl TS for Point {
                 Field::new("y", TypeDef::Primitive(Primitive::Number)),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -55,6 +56,7 @@ impl TS for User {
                 Field::new("active", TypeDef::Primitive(Primitive::Boolean)),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -89,6 +91,7 @@ impl TS for Profile {
                 ])),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -108,6 +111,7 @@ impl TS for Rgb {
                 TypeDef::Primitive(Primitive::Number),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -123,6 +127,7 @@ impl TS for Ping {
             name: "Ping".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Null)),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -138,6 +143,7 @@ impl TS for UserId {
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -159,6 +165,7 @@ impl TS for Rectangle {
                 Field::new("bottom_right", TypeDef::Ref("Point".to_string())),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -178,6 +185,7 @@ impl TS for Polygon {
                 Field::new("vertices", TypeDef::Array(Box::new(TypeDef::Ref("Point".to_string())))),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -200,6 +208,7 @@ impl TS for Config {
                 }),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -229,6 +238,7 @@ impl TS for Status {
                 TypeDef::Literal(ferro_type::Literal::String("Failed".to_string())),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -263,6 +273,7 @@ impl TS for Coordinate {
                 ]),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -308,6 +319,7 @@ impl TS for Message {
                 ]),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -338,6 +350,7 @@ impl TS for GetUserRequest {
                 Field::new("user_id", TypeDef::Primitive(Primitive::Number)),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -360,6 +373,7 @@ impl TS for GetUserResponse {
                 ])),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -386,6 +400,7 @@ impl TS for ListUsersRequest {
                 ])),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -411,6 +426,7 @@ impl TS for ListUsersResponse {
                 Field::new("per_page", TypeDef::Primitive(Primitive::Number)),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -436,6 +452,7 @@ impl TS for ApiError {
                 Field::new("message", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -467,6 +484,7 @@ impl TS for DetailedError {
                 ])),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -508,6 +526,7 @@ impl TS for RpcError {
                 ]),
             ])),
             module: None,
+            wrapper: None,
         }
     }
 }
@@ -1047,6 +1066,26 @@ mod tests {
 }
 
 // ============================================================================
+// WRAPPER FIXTURES (using #[ts(wrapper = "...")])
+// ============================================================================
+
+/// Struct with simple Prettify wrapper
+#[derive(Debug, Clone, DeriveTS)]
+#[ts(wrapper = "Prettify")]
+pub struct PrettifiedUser {
+    pub id: u64,
+    pub name: String,
+}
+
+/// Struct with chained wrappers
+#[derive(Debug, Clone, DeriveTS)]
+#[ts(wrapper = "Prettify<Required<")]
+pub struct RequiredConfig {
+    pub theme: String,
+    pub language: String,
+}
+
+// ============================================================================
 // DERIVED ENUM FIXTURES (using #[derive(TS)])
 // ============================================================================
 
@@ -1203,5 +1242,30 @@ mod derive_tests {
             inner_def(DerivedRpcError::typescript()).render(),
             inner_def(RpcError::typescript()).render()
         );
+    }
+
+    // ========================================================================
+    // WRAPPER TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_prettified_user_wrapper() {
+        let td = PrettifiedUser::typescript();
+        let decl = td.render_declaration();
+        // Should output: type PrettifiedUser = Prettify<{ id: number; name: string }>;
+        assert!(decl.contains("Prettify<"), "Should have Prettify wrapper, got: {}", decl);
+        assert!(decl.contains("id: number"), "Should have id field, got: {}", decl);
+        assert!(decl.contains("name: string"), "Should have name field, got: {}", decl);
+    }
+
+    #[test]
+    fn test_required_config_chained_wrapper() {
+        let td = RequiredConfig::typescript();
+        let decl = td.render_declaration();
+        // Should output: type RequiredConfig = Prettify<Required<{ theme: string; language: string }>>;
+        assert!(decl.contains("Prettify<Required<"), "Should have chained wrapper, got: {}", decl);
+        assert!(decl.contains(">>"), "Should have closing brackets, got: {}", decl);
+        assert!(decl.contains("theme: string"), "Should have theme field, got: {}", decl);
+        assert!(decl.contains("language: string"), "Should have language field, got: {}", decl);
     }
 }

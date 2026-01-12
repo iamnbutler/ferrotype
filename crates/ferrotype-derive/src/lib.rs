@@ -132,6 +132,8 @@ struct ContainerAttrs {
     namespace: Vec<String>,
     /// Type to extend via intersection (e.g., "Claude.Todo" generates `type X = Claude.Todo & { ... }`)
     extends: Option<String>,
+    /// Utility type wrapper (e.g., "Prettify" or "Prettify<Required<")
+    wrapper: Option<String>,
 }
 
 impl ContainerAttrs {
@@ -187,6 +189,9 @@ impl ContainerAttrs {
                 } else if meta.path.is_ident("extends") {
                     let value: syn::LitStr = meta.value()?.parse()?;
                     result.extends = Some(value.value());
+                } else if meta.path.is_ident("wrapper") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.wrapper = Some(value.value());
                 }
                 Ok(())
             })?;
@@ -508,7 +513,7 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
     match &input.data {
         Data::Enum(data) => {
             let typedef = generate_enum_typedef(&data.variants, &container_attrs)?;
-            generate_impl(name, &type_name, &container_attrs.namespace, generics, typedef)
+            generate_impl(name, &type_name, &container_attrs.namespace, &container_attrs.wrapper, generics, typedef)
         }
         Data::Struct(data) => {
             // Handle transparent newtypes - they become the inner type directly
@@ -529,7 +534,7 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
             if let Some(ref pattern) = container_attrs.pattern {
                 let (strings, types) = parse_template_pattern(pattern)?;
                 let typedef = generate_template_literal_expr(&strings, &types);
-                return generate_impl(name, &type_name, &[], generics, typedef);
+                return generate_impl(name, &type_name, &[], &container_attrs.wrapper, generics, typedef);
             }
 
             let (typedef, validations) = generate_struct_typedef(&data.fields, &container_attrs)?;
@@ -546,7 +551,7 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 typedef
             };
 
-            let impl_code = generate_impl(name, &type_name, &container_attrs.namespace, generics, typedef)?;
+            let impl_code = generate_impl(name, &type_name, &container_attrs.namespace, &container_attrs.wrapper, generics, typedef)?;
 
             // Generate validation code for indexed access with Type/Ident
             let validation_code = generate_indexed_access_validations(name, &validations);
@@ -1070,6 +1075,7 @@ fn generate_impl(
     name: &Ident,
     name_str: &str,
     namespace: &[String],
+    wrapper: &Option<String>,
     generics: &Generics,
     typedef_expr: TokenStream2,
 ) -> syn::Result<TokenStream2> {
@@ -1127,6 +1133,12 @@ fn generate_impl(
         quote! { vec![#(#ns_strings),*] }
     };
 
+    // Generate wrapper option
+    let wrapper_expr = match wrapper {
+        Some(w) => quote! { Some(#w.to_string()) },
+        None => quote! { None },
+    };
+
     Ok(quote! {
         impl #impl_generics ferro_type::TS for #name #ty_generics #where_clause {
             fn typescript() -> ferro_type::TypeDef {
@@ -1135,6 +1147,7 @@ fn generate_impl(
                     name: #name_str.to_string(),
                     def: Box::new(#typedef_expr),
                     module: Some(module_path!().to_string()),
+                    wrapper: #wrapper_expr,
                 }
             }
         }

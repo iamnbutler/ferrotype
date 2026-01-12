@@ -76,6 +76,8 @@ pub static TYPESCRIPT_TYPES: [fn() -> TypeDef];
 ///             namespace: vec![],
 ///             name: "UserId".into(),
 ///             def: Box::new(TypeDef::Primitive(Primitive::String)),
+///             module: None,
+///             wrapper: None,
 ///         }
 ///     }
 /// }
@@ -135,6 +137,11 @@ pub enum TypeDef {
     /// The optional `namespace` field allows placing types in TypeScript namespaces:
     /// - `namespace: vec![]` → `type State = ...`
     /// - `namespace: vec!["VM".into(), "Git".into()]` → `namespace VM { namespace Git { type State = ... } }`
+    ///
+    /// The optional `wrapper` field allows wrapping the type in utility types:
+    /// - `wrapper: None` → `type Name = Definition;`
+    /// - `wrapper: Some("Prettify")` → `type Name = Prettify<Definition>;`
+    /// - `wrapper: Some("Prettify<Required<")` → `type Name = Prettify<Required<Definition>>;`
     Named {
         /// Optional namespace path, e.g., ["VM", "Git"] for `namespace VM { namespace Git { ... } }`
         namespace: Vec<String>,
@@ -144,6 +151,8 @@ pub enum TypeDef {
         def: Box<TypeDef>,
         /// Optional module path for multi-file export (e.g., "models::user")
         module: Option<String>,
+        /// Optional utility type wrapper (e.g., "Prettify" or "Prettify<Required<")
+        wrapper: Option<String>,
     },
 
     /// A reference to a named type. Used to avoid infinite recursion and
@@ -525,11 +534,17 @@ impl TypeDef {
     /// For `Named` types, this returns `type Name = Definition;`
     /// For `GenericDef` types, this returns `type Name<T, ...> = Definition;`
     /// If the type has a namespace, it wraps in `namespace X { ... }`.
+    /// If the type has a wrapper, wraps in utility type: `type Name = Wrapper<Definition>;`
     /// For other types, this just returns the rendered type.
     pub fn render_declaration(&self) -> String {
         match self {
-            TypeDef::Named { namespace, name, def, .. } => {
-                let inner = format!("type {} = {};", name, def.render());
+            TypeDef::Named { namespace, name, def, wrapper, .. } => {
+                let def_rendered = def.render();
+                let wrapped = match wrapper {
+                    Some(w) => Self::apply_wrapper(w, &def_rendered),
+                    None => def_rendered,
+                };
+                let inner = format!("type {} = {};", name, wrapped);
                 Self::wrap_in_namespace(namespace, &inner)
             }
             TypeDef::GenericDef {
@@ -541,6 +556,27 @@ impl TypeDef {
                 format!("type {}<{}> = {};", name, params_str.join(", "), def.render())
             }
             _ => self.render(),
+        }
+    }
+
+    /// Applies a utility type wrapper to a definition.
+    ///
+    /// The wrapper can be:
+    /// - `"Prettify"` → `Prettify<Definition>`
+    /// - `"Prettify<Required<"` → `Prettify<Required<Definition>>` (closes unclosed `<`)
+    fn apply_wrapper(wrapper: &str, definition: &str) -> String {
+        // Count unclosed '<' characters to know how many '>' to add
+        let open_count = wrapper.chars().filter(|c| *c == '<').count();
+        let close_count = wrapper.chars().filter(|c| *c == '>').count();
+        let needed_closes = open_count.saturating_sub(close_count);
+
+        if open_count == 0 {
+            // Simple wrapper like "Prettify" → "Prettify<Definition>"
+            format!("{}<{}>", wrapper, definition)
+        } else {
+            // Wrapper with open angle brackets like "Prettify<Required<"
+            // Just append definition and closing brackets
+            format!("{}{}{}", wrapper, definition, ">".repeat(needed_closes))
         }
     }
 
@@ -1064,8 +1100,13 @@ impl TypeRegistry {
         for name in sorted {
             if let Some(typedef) = self.types.get(name) {
                 match typedef {
-                    TypeDef::Named { namespace, name, def, .. } => {
-                        let inner = format!("export type {} = {};", name, def.render());
+                    TypeDef::Named { namespace, name, def, wrapper, .. } => {
+                        let def_rendered = def.render();
+                        let wrapped = match wrapper {
+                            Some(w) => TypeDef::apply_wrapper(w, &def_rendered),
+                            None => def_rendered,
+                        };
+                        let inner = format!("export type {} = {};", name, wrapped);
                         if namespace.is_empty() {
                             output.push_str(&inner);
                         } else {
@@ -1447,6 +1488,7 @@ mod tests {
             name: "UserId".into(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
         // Named types render as just their name (for inline use)
         assert_eq!(named.render(), "UserId");
@@ -1466,6 +1508,7 @@ mod tests {
                 TypeDef::Literal(Literal::String("unknown".into())),
             ])),
             module: None,
+            wrapper: None,
         };
         // Inline reference includes namespace path
         assert_eq!(namespaced.render(), "VM.Git.State");
@@ -1483,11 +1526,78 @@ mod tests {
             name: "Response".into(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
         assert_eq!(namespaced.render(), "API.Response");
         let decl = namespaced.render_declaration();
         assert!(decl.contains("namespace API {"));
         assert!(decl.contains("type Response = string;"));
+    }
+
+    #[test]
+    fn test_typedef_wrapper_simple() {
+        // Simple wrapper like "Prettify"
+        let wrapped = TypeDef::Named {
+            namespace: vec![],
+            name: "User".into(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Primitive(Primitive::String)),
+                Field::new("name", TypeDef::Primitive(Primitive::String)),
+            ])),
+            module: None,
+            wrapper: Some("Prettify".to_string()),
+        };
+        let decl = wrapped.render_declaration();
+        assert_eq!(decl, "type User = Prettify<{ id: string; name: string }>;");
+    }
+
+    #[test]
+    fn test_typedef_wrapper_chained() {
+        // Chained wrapper like "Prettify<Required<"
+        let wrapped = TypeDef::Named {
+            namespace: vec![],
+            name: "Config".into(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("theme", TypeDef::Primitive(Primitive::String)),
+            ])),
+            module: None,
+            wrapper: Some("Prettify<Required<".to_string()),
+        };
+        let decl = wrapped.render_declaration();
+        assert_eq!(decl, "type Config = Prettify<Required<{ theme: string }>>;");
+    }
+
+    #[test]
+    fn test_typedef_wrapper_with_namespace() {
+        // Wrapper with namespace
+        let wrapped = TypeDef::Named {
+            namespace: vec!["API".into()],
+            name: "Response".into(),
+            def: Box::new(TypeDef::Primitive(Primitive::String)),
+            module: None,
+            wrapper: Some("Prettify".to_string()),
+        };
+        let decl = wrapped.render_declaration();
+        assert!(decl.contains("namespace API {"));
+        assert!(decl.contains("type Response = Prettify<string>;"));
+    }
+
+    #[test]
+    fn test_apply_wrapper_simple() {
+        let result = TypeDef::apply_wrapper("Prettify", "{ id: string }");
+        assert_eq!(result, "Prettify<{ id: string }>");
+    }
+
+    #[test]
+    fn test_apply_wrapper_chained() {
+        let result = TypeDef::apply_wrapper("Prettify<Required<", "{ id: string }");
+        assert_eq!(result, "Prettify<Required<{ id: string }>>");
+    }
+
+    #[test]
+    fn test_apply_wrapper_triple_chained() {
+        let result = TypeDef::apply_wrapper("A<B<C<", "T");
+        assert_eq!(result, "A<B<C<T>>>");
     }
 
     #[test]
@@ -1743,6 +1853,7 @@ mod tests {
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         };
 
         registry.add_typedef(user_type);
@@ -1760,6 +1871,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
 
         registry.add_typedef(user_type.clone());
@@ -1779,6 +1891,7 @@ mod tests {
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
 
         // User type depends on UserId via Ref
@@ -1790,6 +1903,7 @@ mod tests {
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         };
 
         // Post type that references User type
@@ -1801,6 +1915,7 @@ mod tests {
                 Field::new("author", user),
             ])),
             module: None,
+            wrapper: None,
         };
 
         registry.add_typedef(post_type);
@@ -1825,6 +1940,7 @@ mod tests {
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         };
 
         registry.add_typedef(user_type);
@@ -1843,6 +1959,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
 
         registry.add_typedef(user_type);
@@ -1861,6 +1978,7 @@ mod tests {
             name: "UserId".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
 
         // User type depends on UserId via Ref
@@ -1872,6 +1990,7 @@ mod tests {
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         };
 
         // Add in reverse order (User before UserId)
@@ -1895,6 +2014,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
 
         registry.add_typedef(user_type);
@@ -1913,12 +2033,14 @@ mod tests {
             name: "Alpha".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
         registry.add_typedef(TypeDef::Named {
             namespace: vec![],
             name: "Beta".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
             module: None,
+            wrapper: None,
         });
 
         let names: Vec<_> = registry.type_names().collect();
@@ -1937,6 +2059,7 @@ mod tests {
             name: "C".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
 
         let b = TypeDef::Named {
@@ -1946,6 +2069,7 @@ mod tests {
                 Field::new("c", TypeDef::Ref("C".to_string())),
             ])),
             module: None,
+            wrapper: None,
         };
 
         let a = TypeDef::Named {
@@ -1955,6 +2079,7 @@ mod tests {
                 Field::new("b", TypeDef::Ref("B".to_string())),
             ])),
             module: None,
+            wrapper: None,
         };
 
         // Add in wrong order
@@ -1985,6 +2110,7 @@ mod tests {
                 Field::new("email", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         };
 
         // UserLogin type depends on Profile via IndexedAccess
@@ -1996,6 +2122,7 @@ mod tests {
                 key: "login".to_string(),
             }),
             module: None,
+            wrapper: None,
         };
 
         // Add in wrong order
@@ -2031,6 +2158,7 @@ mod tests {
                     Field::new("age", TypeDef::Primitive(Primitive::Number)),
                 ])),
                 module: None,
+                wrapper: None,
             }
         }
     }
@@ -2058,6 +2186,7 @@ mod tests {
             name: "ManualType".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         };
         registry.add_typedef(manual_type);
 
@@ -2288,6 +2417,7 @@ mod tests {
                 TypeDef::Primitive(Primitive::String),
             )])),
             module: None,
+            wrapper: None,
         };
 
         // Then define a generic using that type as a constraint
@@ -2337,6 +2467,7 @@ mod tests {
                 Field::new("content", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         };
 
         let image_data = TypeDef::Named {
@@ -2347,6 +2478,7 @@ mod tests {
                 Field::new("url", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         };
 
         // 3. Define wrapped message types
@@ -2358,6 +2490,7 @@ mod tests {
                 args: vec![TypeDef::Ref("TextData".into())],
             }),
             module: None,
+            wrapper: None,
         };
 
         let image_message = TypeDef::Named {
@@ -2368,6 +2501,7 @@ mod tests {
                 args: vec![TypeDef::Ref("ImageData".into())],
             }),
             module: None,
+            wrapper: None,
         };
 
         // 4. Define the union type
@@ -2379,6 +2513,7 @@ mod tests {
                 TypeDef::Ref("ImageMessage".into()),
             ])),
             module: None,
+            wrapper: None,
         };
 
         registry.add_typedef(core_def);

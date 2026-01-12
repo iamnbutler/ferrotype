@@ -48,6 +48,31 @@ use ferro_type::{TypeDef, TypeRegistry, TS};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+// ============================================================================
+// UTILITY TYPES
+// ============================================================================
+
+/// The Prettify utility type flattens intersection types for better readability.
+///
+/// Example usage in Rust:
+/// ```ignore
+/// #[derive(TypeScript)]
+/// #[ts(wrapper = "Prettify")]
+/// struct User {
+///     pub id: String,
+///     pub name: String,
+/// }
+/// ```
+///
+/// Generates:
+/// ```typescript
+/// type User = Prettify<{ id: string; name: string }>;
+/// ```
+pub const PRETTIFY_TYPE: &str = "type Prettify<T> = { [K in keyof T]: T[K] } & {};";
+
+/// Exported version of the Prettify utility type (with export keyword)
+pub const PRETTIFY_TYPE_EXPORTED: &str = "export type Prettify<T> = { [K in keyof T]: T[K] } & {};";
+
 /// How to export types in the generated file
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ExportStyle {
@@ -78,6 +103,9 @@ pub struct Config {
     /// Whether to add ESM-style .js extensions to imports
     /// (for future multi-file mode)
     pub esm_extensions: bool,
+
+    /// Include common utility types (Prettify, etc.) in the output
+    pub include_utilities: bool,
 }
 
 impl Config {
@@ -113,6 +141,12 @@ impl Config {
     /// Enable ESM-style .js extensions in imports (for future multi-file mode)
     pub fn esm_extensions(mut self) -> Self {
         self.esm_extensions = true;
+        self
+    }
+
+    /// Include common utility types (Prettify, etc.) in the generated output
+    pub fn include_utilities(mut self) -> Self {
+        self.include_utilities = true;
         self
     }
 }
@@ -181,6 +215,19 @@ impl Generator {
             output.push_str("// Do not edit manually\n");
         }
         output.push('\n');
+
+        // Utility types (if configured)
+        if self.config.include_utilities {
+            match self.config.export_style {
+                ExportStyle::None => {
+                    output.push_str(PRETTIFY_TYPE);
+                }
+                ExportStyle::Named | ExportStyle::Grouped => {
+                    output.push_str(PRETTIFY_TYPE_EXPORTED);
+                }
+            }
+            output.push_str("\n\n");
+        }
 
         // Types in dependency order
         match self.config.export_style {
@@ -533,6 +580,7 @@ mod tests {
                 Field::new("name", TypeDef::Primitive(Primitive::String)),
             ])),
             module: None,
+            wrapper: None,
         };
 
         generator.add(user_type);
@@ -550,6 +598,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         let output = generator.generate();
@@ -566,6 +615,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         let output = generator.generate();
@@ -581,12 +631,14 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
         generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         let output = generator.generate();
@@ -615,6 +667,36 @@ mod tests {
     }
 
     #[test]
+    fn test_include_utilities() {
+        let generator = Generator::new(Config::new().include_utilities());
+
+        let output = generator.generate();
+        assert!(output.contains("export type Prettify<T>"));
+        assert!(output.contains("{ [K in keyof T]: T[K] }"));
+    }
+
+    #[test]
+    fn test_include_utilities_no_export() {
+        let generator = Generator::new(
+            Config::new()
+                .export_style(ExportStyle::None)
+                .include_utilities()
+        );
+
+        let output = generator.generate();
+        assert!(output.contains("type Prettify<T>"));
+        assert!(!output.contains("export type Prettify"));
+    }
+
+    #[test]
+    fn test_no_utilities_by_default() {
+        let generator = Generator::with_defaults();
+
+        let output = generator.generate();
+        assert!(!output.contains("Prettify"));
+    }
+
+    #[test]
     fn test_write_creates_parent_dirs() {
         let temp_dir = tempfile::tempdir().unwrap();
         let output_path = temp_dir.path().join("nested/dir/types.ts");
@@ -625,6 +707,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         generator.write().unwrap();
@@ -645,6 +728,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         // First write should return true (changed)
@@ -659,6 +743,7 @@ mod tests {
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         // Third write should return true (changed)
@@ -692,6 +777,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         export_to_file(&output_path, &registry).unwrap();
@@ -729,24 +815,28 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
+            wrapper: None,
         });
         generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
+            wrapper: None,
         });
         generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Request".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::api".to_string()),
+            wrapper: None,
         });
         generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Orphan".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         let by_module = generator.types_by_module();
@@ -767,12 +857,14 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
+            wrapper: None,
         });
         generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
             module: Some("my_crate::models".to_string()),
+            wrapper: None,
         });
 
         let output = generator.generate_for_module("my_crate::models", &["User".to_string(), "Post".to_string()]);
@@ -793,12 +885,14 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models::user".to_string()),
+            wrapper: None,
         });
         generator.add(TypeDef::Named {
             namespace: vec![],
             name: "Request".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::api".to_string()),
+            wrapper: None,
         });
 
         let count = generator.write_multi_file(temp_dir.path()).unwrap();
@@ -829,6 +923,7 @@ mod tests {
             name: "User".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: Some("my_crate::models".to_string()),
+            wrapper: None,
         });
 
         // First write should write
@@ -845,6 +940,7 @@ mod tests {
             name: "Post".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::Number)),
             module: Some("my_crate::models".to_string()),
+            wrapper: None,
         });
 
         // Third write should write (changed)
@@ -862,6 +958,7 @@ mod tests {
             name: "Orphan".to_string(),
             def: Box::new(TypeDef::Primitive(Primitive::String)),
             module: None,
+            wrapper: None,
         });
 
         generator.write_multi_file(temp_dir.path()).unwrap();
