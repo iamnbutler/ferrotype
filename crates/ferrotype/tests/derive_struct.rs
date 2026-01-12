@@ -897,3 +897,133 @@ fn test_multiple_indexed_access() {
     assert!(rendered.contains("email: Profile[\"email\"]"));
     assert!(rendered.contains("custom_field: number"));
 }
+
+// ============================================================================
+// INTERSECTION TYPE (EXTENDS) TESTS
+// ============================================================================
+
+/// Base type for extension tests
+#[derive(TypeScript)]
+struct BaseTodo {
+    id: String,
+    title: String,
+    completed: bool,
+}
+
+/// Struct extending BaseTodo via intersection
+#[derive(TypeScript)]
+#[ts(extends = "BaseTodo")]
+struct Subtask {
+    created_at: i64,
+    #[ts(default)]
+    completed_at: Option<i64>,
+}
+
+#[test]
+fn test_extends_basic() {
+    let td = Subtask::typescript();
+    let rendered = inner_def(td).render();
+    // Should be an intersection type: BaseTodo & { ... }
+    assert!(rendered.contains("BaseTodo"));
+    assert!(rendered.contains("&"));
+    assert!(rendered.contains("created_at: number"));
+    assert!(rendered.contains("completed_at?:"));
+}
+
+#[test]
+fn test_extends_declaration() {
+    let td = Subtask::typescript();
+    let decl = td.render_declaration();
+    // Declaration should be: type Subtask = BaseTodo & { created_at: number; completed_at?: number | null };
+    assert!(decl.contains("type Subtask = BaseTodo &"));
+    assert!(decl.contains("created_at: number"));
+}
+
+/// Struct extending an external type (like Claude.Todo)
+#[derive(TypeScript)]
+#[ts(extends = "Claude.Todo")]
+struct ExtendingExternalType {
+    custom_field: String,
+    priority: i32,
+}
+
+#[test]
+fn test_extends_external_type() {
+    let td = ExtendingExternalType::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("Claude.Todo"));
+    assert!(rendered.contains("&"));
+    assert!(rendered.contains("custom_field: string"));
+    assert!(rendered.contains("priority: number"));
+}
+
+#[test]
+fn test_extends_external_type_declaration() {
+    let td = ExtendingExternalType::typescript();
+    let decl = td.render_declaration();
+    assert!(decl.contains("type ExtendingExternalType = Claude.Todo &"));
+}
+
+/// Struct extending with rename_all
+#[derive(TypeScript)]
+#[ts(extends = "BaseTodo", rename_all = "camelCase")]
+struct CamelCaseSubtask {
+    created_at: i64,
+    due_date: String,
+}
+
+#[test]
+fn test_extends_with_rename_all() {
+    let td = CamelCaseSubtask::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("BaseTodo"));
+    assert!(rendered.contains("&"));
+    assert!(rendered.contains("createdAt: number"));
+    assert!(rendered.contains("dueDate: string"));
+}
+
+/// Struct extending with type rename
+#[derive(TypeScript)]
+#[ts(rename = "EnhancedTodo", extends = "BaseTodo")]
+struct RenamedExtends {
+    extra_field: String,
+}
+
+#[test]
+fn test_extends_with_type_rename() {
+    let td = RenamedExtends::typescript();
+    // Type name should be renamed
+    assert_eq!(td.render(), "EnhancedTodo");
+    let decl = td.render_declaration();
+    assert!(decl.contains("type EnhancedTodo = BaseTodo &"));
+}
+
+/// Tree item example from issue - combining indexed access with extends
+#[derive(TypeScript)]
+struct Tree {
+    tree: Vec<TreeEntry>,
+}
+
+#[derive(TypeScript)]
+struct TreeEntry {
+    path: String,
+    mode: String,
+}
+
+#[derive(TypeScript)]
+#[ts(extends = "TreeEntry")]
+struct Item {
+    sha: String,
+    #[ts(type = "\"tree\" | \"blob\"")]
+    item_type: String,
+}
+
+#[test]
+fn test_extends_with_type_override() {
+    let td = Item::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("TreeEntry"));
+    assert!(rendered.contains("&"));
+    assert!(rendered.contains("sha: string"));
+    assert!(rendered.contains("item_type: \"tree\" | \"blob\""));
+}

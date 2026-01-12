@@ -129,6 +129,8 @@ struct ContainerAttrs {
     pattern: Option<String>,
     /// Namespace path for the type (e.g., "VM::Git" or "VM.Git")
     namespace: Vec<String>,
+    /// Type to extend via intersection (e.g., "Claude.Todo" generates `type X = Claude.Todo & { ... }`)
+    extends: Option<String>,
 }
 
 impl ContainerAttrs {
@@ -181,6 +183,9 @@ impl ContainerAttrs {
                         .filter(|s| !s.is_empty())
                         .map(|s| s.to_string())
                         .collect();
+                } else if meta.path.is_ident("extends") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    result.extends = Some(value.value());
                 }
                 Ok(())
             })?;
@@ -471,6 +476,19 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
 
             let typedef = generate_struct_typedef(&data.fields, &container_attrs)?;
+
+            // Handle intersection types via extends attribute
+            let typedef = if let Some(ref extends_type) = container_attrs.extends {
+                quote! {
+                    ferro_type::TypeDef::Intersection(vec![
+                        ferro_type::TypeDef::Ref(#extends_type.to_string()),
+                        #typedef
+                    ])
+                }
+            } else {
+                typedef
+            };
+
             generate_impl(name, &type_name, &container_attrs.namespace, generics, typedef)
         }
         Data::Union(_) => {
