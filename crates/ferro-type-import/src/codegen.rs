@@ -70,6 +70,7 @@ fn generate_named_type(name: &str, def: &TypeDef, is_interface: bool) -> String 
             };
             generate_type_alias(name, rust_type)
         }
+        TypeDef::Intersection(types) => generate_intersection_type(name, types),
         _ => format!("// TODO: Unsupported definition for {}", name),
     }
 }
@@ -315,6 +316,58 @@ fn generate_tagged_enum(name: &str, variants: &[TypeDef]) -> String {
     output
 }
 
+/// Generate an intersection type.
+///
+/// Intersection types (A & B) are flattened into a single struct if all
+/// components are objects. Otherwise, falls back to serde_json::Value.
+fn generate_intersection_type(name: &str, types: &[TypeDef]) -> String {
+    // Try to flatten all object types into a single struct
+    let mut all_fields: Vec<Field> = Vec::new();
+
+    for ty in types {
+        match ty {
+            TypeDef::Object(fields) => {
+                // Merge fields, later fields win on conflict
+                for field in fields {
+                    // Remove any existing field with the same name
+                    all_fields.retain(|f| f.name != field.name);
+                    all_fields.push(field.clone());
+                }
+            }
+            TypeDef::Ref(ref_name) => {
+                // For references, we can't resolve at codegen time
+                // Generate a comment noting the reference
+                return format!(
+                    "// TODO: Intersection with {}\npub type {} = serde_json::Value;",
+                    ref_name, name
+                );
+            }
+            TypeDef::Named { def, .. } => {
+                // Try to extract fields from named type's definition
+                if let TypeDef::Object(fields) = def.as_ref() {
+                    for field in fields {
+                        all_fields.retain(|f| f.name != field.name);
+                        all_fields.push(field.clone());
+                    }
+                } else {
+                    return generate_type_alias(name, "serde_json::Value");
+                }
+            }
+            _ => {
+                // Non-object types in intersection - fall back
+                return generate_type_alias(name, "serde_json::Value");
+            }
+        }
+    }
+
+    if all_fields.is_empty() {
+        return generate_type_alias(name, "serde_json::Value");
+    }
+
+    generate_struct(name, &all_fields, &[])
+}
+
+
 /// Generate a type alias.
 fn generate_type_alias(name: &str, rust_type: &str) -> String {
     format!("pub type {} = {};", name, rust_type)
@@ -495,5 +548,48 @@ mod tests {
         assert!(output.contains("#[serde(tag = \"type\")]"));
         assert!(output.contains("Text"));
         assert!(output.contains("Image"));
+    }
+
+    #[test]
+    fn test_generate_intersection_type() {
+        let output = generate(r#"
+            type Combined = { name: string } & { age: number };
+        "#);
+
+        assert!(output.contains("pub struct Combined"));
+        assert!(output.contains("pub name: String"));
+        assert!(output.contains("pub age: f64"));
+    }
+
+    #[test]
+    fn test_generate_ts_enum() {
+        let output = generate(r#"
+            enum Status {
+                Active,
+                Inactive,
+                Pending
+            }
+        "#);
+
+        assert!(output.contains("pub enum Status"));
+        assert!(output.contains("Active"));
+        assert!(output.contains("Inactive"));
+        assert!(output.contains("Pending"));
+    }
+
+    #[test]
+    fn test_generate_ts_enum_with_string_values() {
+        let output = generate(r#"
+            enum Direction {
+                Up = "UP",
+                Down = "DOWN"
+            }
+        "#);
+
+        assert!(output.contains("pub enum Direction"));
+        // The variant names will be "Up" and "Down" (PascalCase)
+        // with serde renames to "UP" and "DOWN"
+        assert!(output.contains("Up"));
+        assert!(output.contains("Down"));
     }
 }
