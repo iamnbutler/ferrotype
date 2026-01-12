@@ -192,7 +192,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "ferro-type"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ferro-type-derive",
  "insta",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "ferro-type-derive"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "ferro-type-gen"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ferro-type",
  "tempfile",

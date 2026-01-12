@@ -201,6 +201,67 @@ pub enum TypeDef {
         /// Types to interpolate (one fewer than strings).
         types: Vec<Box<TypeDef>>,
     },
+
+    /// A generic type definition with type parameters.
+    ///
+    /// This is for **defining** a generic type with parameters.
+    /// For example: `type Core<T extends { type: string }> = { id: string; data: T }`
+    ///
+    /// # The Core<T> Pattern
+    ///
+    /// A common pattern for rich discriminated unions wraps variants in a generic:
+    ///
+    /// ```typescript
+    /// // Generic wrapper for common metadata
+    /// interface Core<T extends { type: string }> {
+    ///     id: string;
+    ///     timestamp: Date;
+    ///     data: T;
+    /// }
+    ///
+    /// // Variant types
+    /// interface TextData { type: "text"; content: string }
+    /// interface ImageData { type: "image"; url: string }
+    ///
+    /// // Full message types
+    /// type TextMessage = Core<TextData>;
+    /// type ImageMessage = Core<ImageData>;
+    /// type Message = TextMessage | ImageMessage;
+    /// ```
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use ferrotype::{TypeDef, TypeParam, Field, Primitive};
+    ///
+    /// // Define: type Core<T extends { type: string }> = { id: string; data: T }
+    /// let core_def = TypeDef::GenericDef {
+    ///     name: "Core".into(),
+    ///     type_params: vec![
+    ///         TypeParam::new("T").with_constraint(TypeDef::Object(vec![
+    ///             Field::new("type", TypeDef::Primitive(Primitive::String)),
+    ///         ])),
+    ///     ],
+    ///     def: Box::new(TypeDef::Object(vec![
+    ///         Field::new("id", TypeDef::Primitive(Primitive::String)),
+    ///         Field::new("data", TypeDef::TypeParamRef("T".into())),
+    ///     ])),
+    /// };
+    /// ```
+    GenericDef {
+        /// The name of the generic type
+        name: String,
+        /// Type parameters with optional constraints and defaults
+        type_params: Vec<TypeParam>,
+        /// The type definition body (may reference type params via TypeParamRef)
+        def: Box<TypeDef>,
+    },
+
+    /// A reference to a type parameter within a generic definition.
+    ///
+    /// This is used inside a `GenericDef` to reference one of its type parameters.
+    /// For example, in `type Core<T> = { data: T }`, the `T` in `data: T` is a `TypeParamRef`.
+    TypeParamRef(String),
 }
 
 /// Primitive TypeScript types.
@@ -266,6 +327,79 @@ impl Field {
     pub fn readonly(mut self) -> Self {
         self.readonly = true;
         self
+    }
+}
+
+/// A type parameter for generic type definitions.
+///
+/// Represents a type parameter like `T`, `T extends string`, or `T = never`.
+///
+/// # Examples
+///
+/// ```ignore
+/// // Simple type parameter: T
+/// TypeParam::new("T")
+///
+/// // Constrained type parameter: T extends { type: string }
+/// TypeParam::new("T").with_constraint(TypeDef::Object(...))
+///
+/// // Type parameter with default: T = never
+/// TypeParam::new("T").with_default(TypeDef::Primitive(Primitive::Never))
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeParam {
+    /// The type parameter name, e.g., "T", "K", "V"
+    pub name: String,
+    /// Optional constraint: `T extends Constraint`
+    pub constraint: Option<Box<TypeDef>>,
+    /// Optional default value: `T = Default`
+    pub default: Option<Box<TypeDef>>,
+}
+
+impl TypeParam {
+    /// Creates a new unconstrained type parameter.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            constraint: None,
+            default: None,
+        }
+    }
+
+    /// Adds a constraint to this type parameter: `T extends Constraint`
+    pub fn with_constraint(mut self, constraint: TypeDef) -> Self {
+        self.constraint = Some(Box::new(constraint));
+        self
+    }
+
+    /// Adds a default type to this type parameter: `T = Default`
+    pub fn with_default(mut self, default: TypeDef) -> Self {
+        self.default = Some(Box::new(default));
+        self
+    }
+
+    /// Renders this type parameter to TypeScript syntax.
+    ///
+    /// # Examples
+    ///
+    /// - `T` → `"T"`
+    /// - `T extends string` → `"T extends string"`
+    /// - `T = never` → `"T = never"`
+    /// - `T extends string = "default"` → `"T extends string = \"default\""`
+    pub fn render(&self) -> String {
+        let mut result = self.name.clone();
+
+        if let Some(ref constraint) = self.constraint {
+            result.push_str(" extends ");
+            result.push_str(&constraint.render());
+        }
+
+        if let Some(ref default) = self.default {
+            result.push_str(" = ");
+            result.push_str(&default.render());
+        }
+
+        result
     }
 }
 
@@ -365,6 +499,15 @@ impl TypeDef {
                 result.push('`');
                 result
             }
+            TypeDef::GenericDef { name, .. } => {
+                // When used inline, a generic definition renders as just its name
+                // (like Named types). Use render_declaration() for the full definition.
+                name.clone()
+            }
+            TypeDef::TypeParamRef(name) => {
+                // Type parameter references render as just the parameter name
+                name.clone()
+            }
         }
     }
 
@@ -372,12 +515,21 @@ impl TypeDef {
     ///
     /// For `Named` types, this returns `type Name = Definition;`
     /// If the type has a namespace, it wraps in `namespace X { ... }`.
+    /// For `GenericDef` types, this returns `type Name<T, ...> = Definition;`
     /// For other types, this just returns the rendered type.
     pub fn render_declaration(&self) -> String {
         match self {
             TypeDef::Named { namespace, name, def, .. } => {
                 let inner = format!("type {} = {};", name, def.render());
                 Self::wrap_in_namespace(namespace, &inner)
+            }
+            TypeDef::GenericDef {
+                name,
+                type_params,
+                def,
+            } => {
+                let params_str: Vec<_> = type_params.iter().map(|p| p.render()).collect();
+                format!("type {}<{}> = {};", name, params_str.join(", "), def.render())
             }
             _ => self.render(),
         }
@@ -663,9 +815,26 @@ impl TypeRegistry {
                     self.extract_named_types(ty);
                 }
             }
+            TypeDef::GenericDef { name, type_params, def } => {
+                if !self.types.contains_key(name) {
+                    self.types.insert(name.clone(), typedef.clone());
+                    self.registration_order.push(name.clone());
+                    // Extract from type parameter constraints and defaults
+                    for param in type_params {
+                        if let Some(ref constraint) = param.constraint {
+                            self.extract_named_types(constraint);
+                        }
+                        if let Some(ref default) = param.default {
+                            self.extract_named_types(default);
+                        }
+                    }
+                    // Extract from the inner definition
+                    self.extract_named_types(def);
+                }
+            }
             // IndexedAccess references a base type by name (similar to Ref)
-            // Primitives, Refs, Literals, and IndexedAccess have no nested named types
-            TypeDef::Primitive(_) | TypeDef::Ref(_) | TypeDef::Literal(_) | TypeDef::IndexedAccess { .. } => {}
+            // Primitives, Refs, Literals, IndexedAccess, and TypeParamRefs have no nested named types
+            TypeDef::Primitive(_) | TypeDef::Ref(_) | TypeDef::Literal(_) | TypeDef::IndexedAccess { .. } | TypeDef::TypeParamRef(_) => {}
         }
     }
 
@@ -739,7 +908,11 @@ impl TypeRegistry {
                 }
                 self.collect_dependencies(return_type, deps);
             }
-            TypeDef::Generic { args, .. } => {
+            TypeDef::Generic { base, args } => {
+                // The base generic type itself is a dependency
+                if self.types.contains_key(base) {
+                    deps.insert(base.clone());
+                }
                 for arg in args {
                     self.collect_dependencies(arg, deps);
                 }
@@ -755,7 +928,20 @@ impl TypeRegistry {
                     deps.insert(base.clone());
                 }
             }
-            TypeDef::Primitive(_) | TypeDef::Literal(_) => {}
+            TypeDef::GenericDef { type_params, def, .. } => {
+                // Don't add self as dependency, but check constraints, defaults, and inner def
+                for param in type_params {
+                    if let Some(ref constraint) = param.constraint {
+                        self.collect_dependencies(constraint, deps);
+                    }
+                    if let Some(ref default) = param.default {
+                        self.collect_dependencies(default, deps);
+                    }
+                }
+                self.collect_dependencies(def, deps);
+            }
+            // TypeParamRef references a type parameter, not a named type, so no dependency
+            TypeDef::Primitive(_) | TypeDef::Literal(_) | TypeDef::TypeParamRef(_) => {}
         }
     }
 
@@ -868,15 +1054,27 @@ impl TypeRegistry {
 
         for name in sorted {
             if let Some(typedef) = self.types.get(name) {
-                if let TypeDef::Named { namespace, name, def, .. } = typedef {
-                    let inner = format!("export type {} = {};", name, def.render());
-                    if namespace.is_empty() {
-                        output.push_str(&inner);
-                    } else {
-                        // For namespaced types, wrap in export namespace
-                        output.push_str(&Self::wrap_in_export_namespace(namespace, &inner));
+                match typedef {
+                    TypeDef::Named { namespace, name, def, .. } => {
+                        let inner = format!("export type {} = {};", name, def.render());
+                        if namespace.is_empty() {
+                            output.push_str(&inner);
+                        } else {
+                            // For namespaced types, wrap in export namespace
+                            output.push_str(&Self::wrap_in_export_namespace(namespace, &inner));
+                        }
+                        output.push_str("\n\n");
                     }
-                    output.push_str("\n\n");
+                    TypeDef::GenericDef { name, type_params, def } => {
+                        let params_str: Vec<_> = type_params.iter().map(|p| p.render()).collect();
+                        output.push_str(&format!(
+                            "export type {}<{}> = {};\n\n",
+                            name,
+                            params_str.join(", "),
+                            def.render()
+                        ));
+                    }
+                    _ => {}
                 }
             }
         }
@@ -1435,6 +1633,326 @@ mod tests {
             key: "path\\to\\key".into(),
         };
         assert_eq!(with_backslash.render(), "Config[\"path\\\\to\\\\key\"]");
+    }
+
+    // ========================================================================
+    // GENERIC TYPE DEFINITION TESTS (Core<T> Pattern)
+    // ========================================================================
+
+    #[test]
+    fn test_type_param_simple() {
+        let param = TypeParam::new("T");
+        assert_eq!(param.render(), "T");
+    }
+
+    #[test]
+    fn test_type_param_with_constraint() {
+        let param = TypeParam::new("T").with_constraint(TypeDef::Primitive(Primitive::String));
+        assert_eq!(param.render(), "T extends string");
+    }
+
+    #[test]
+    fn test_type_param_with_object_constraint() {
+        let param = TypeParam::new("T").with_constraint(TypeDef::Object(vec![
+            Field::new("type", TypeDef::Primitive(Primitive::String)),
+        ]));
+        assert_eq!(param.render(), "T extends { type: string }");
+    }
+
+    #[test]
+    fn test_type_param_with_default() {
+        let param = TypeParam::new("T").with_default(TypeDef::Primitive(Primitive::Never));
+        assert_eq!(param.render(), "T = never");
+    }
+
+    #[test]
+    fn test_type_param_with_constraint_and_default() {
+        let param = TypeParam::new("T")
+            .with_constraint(TypeDef::Primitive(Primitive::String))
+            .with_default(TypeDef::Literal(Literal::String("default".into())));
+        assert_eq!(param.render(), "T extends string = \"default\"");
+    }
+
+    #[test]
+    fn test_type_param_ref_render() {
+        let param_ref = TypeDef::TypeParamRef("T".into());
+        assert_eq!(param_ref.render(), "T");
+    }
+
+    #[test]
+    fn test_generic_def_simple() {
+        // type Identity<T> = T;
+        let generic_def = TypeDef::GenericDef {
+            name: "Identity".into(),
+            type_params: vec![TypeParam::new("T")],
+            def: Box::new(TypeDef::TypeParamRef("T".into())),
+        };
+        assert_eq!(generic_def.render(), "Identity");
+        assert_eq!(generic_def.render_declaration(), "type Identity<T> = T;");
+    }
+
+    #[test]
+    fn test_generic_def_with_constraint() {
+        // type Wrapper<T extends { type: string }> = { data: T };
+        let generic_def = TypeDef::GenericDef {
+            name: "Wrapper".into(),
+            type_params: vec![TypeParam::new("T").with_constraint(TypeDef::Object(vec![
+                Field::new("type", TypeDef::Primitive(Primitive::String)),
+            ]))],
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("data", TypeDef::TypeParamRef("T".into())),
+            ])),
+        };
+        assert_eq!(
+            generic_def.render_declaration(),
+            "type Wrapper<T extends { type: string }> = { data: T };"
+        );
+    }
+
+    #[test]
+    fn test_generic_def_core_pattern() {
+        // The Core<T> pattern for rich discriminated unions:
+        // type Core<T extends { type: string }> = { id: string; timestamp: number; data: T };
+        let core_def = TypeDef::GenericDef {
+            name: "Core".into(),
+            type_params: vec![TypeParam::new("T").with_constraint(TypeDef::Object(vec![
+                Field::new("type", TypeDef::Primitive(Primitive::String)),
+            ]))],
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Primitive(Primitive::String)),
+                Field::new("timestamp", TypeDef::Primitive(Primitive::Number)),
+                Field::new("data", TypeDef::TypeParamRef("T".into())),
+            ])),
+        };
+
+        assert_eq!(
+            core_def.render_declaration(),
+            "type Core<T extends { type: string }> = { id: string; timestamp: number; data: T };"
+        );
+    }
+
+    #[test]
+    fn test_generic_def_multiple_params() {
+        // type Pair<K, V> = { key: K; value: V };
+        let pair_def = TypeDef::GenericDef {
+            name: "Pair".into(),
+            type_params: vec![TypeParam::new("K"), TypeParam::new("V")],
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("key", TypeDef::TypeParamRef("K".into())),
+                Field::new("value", TypeDef::TypeParamRef("V".into())),
+            ])),
+        };
+        assert_eq!(
+            pair_def.render_declaration(),
+            "type Pair<K, V> = { key: K; value: V };"
+        );
+    }
+
+    #[test]
+    fn test_generic_def_with_default_params() {
+        // type Result<T, E = Error> = { ok: true; value: T } | { ok: false; error: E };
+        let result_def = TypeDef::GenericDef {
+            name: "Result".into(),
+            type_params: vec![
+                TypeParam::new("T"),
+                TypeParam::new("E").with_default(TypeDef::Ref("Error".into())),
+            ],
+            def: Box::new(TypeDef::Union(vec![
+                TypeDef::Object(vec![
+                    Field::new("ok", TypeDef::Literal(Literal::Boolean(true))),
+                    Field::new("value", TypeDef::TypeParamRef("T".into())),
+                ]),
+                TypeDef::Object(vec![
+                    Field::new("ok", TypeDef::Literal(Literal::Boolean(false))),
+                    Field::new("error", TypeDef::TypeParamRef("E".into())),
+                ]),
+            ])),
+        };
+        assert_eq!(
+            result_def.render_declaration(),
+            "type Result<T, E = Error> = { ok: true; value: T } | { ok: false; error: E };"
+        );
+    }
+
+    #[test]
+    fn test_generic_application_with_def() {
+        // Using Core<TextData> where TextData = { type: "text"; content: string }
+        let application = TypeDef::Generic {
+            base: "Core".into(),
+            args: vec![TypeDef::Object(vec![
+                Field::new("type", TypeDef::Literal(Literal::String("text".into()))),
+                Field::new("content", TypeDef::Primitive(Primitive::String)),
+            ])],
+        };
+        assert_eq!(
+            application.render(),
+            "Core<{ type: \"text\"; content: string }>"
+        );
+    }
+
+    #[test]
+    fn test_registry_with_generic_def() {
+        let mut registry = TypeRegistry::new();
+
+        // Add a generic type definition
+        let core_def = TypeDef::GenericDef {
+            name: "Core".into(),
+            type_params: vec![TypeParam::new("T")],
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Primitive(Primitive::String)),
+                Field::new("data", TypeDef::TypeParamRef("T".into())),
+            ])),
+        };
+        registry.add_typedef(core_def);
+
+        assert_eq!(registry.len(), 1);
+        assert!(registry.get("Core").is_some());
+
+        let output = registry.render();
+        assert!(output.contains("type Core<T> = { id: string; data: T };"));
+    }
+
+    #[test]
+    fn test_registry_exported_with_generic_def() {
+        let mut registry = TypeRegistry::new();
+
+        let core_def = TypeDef::GenericDef {
+            name: "Core".into(),
+            type_params: vec![TypeParam::new("T").with_constraint(TypeDef::Object(vec![
+                Field::new("type", TypeDef::Primitive(Primitive::String)),
+            ]))],
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("data", TypeDef::TypeParamRef("T".into())),
+            ])),
+        };
+        registry.add_typedef(core_def);
+
+        let output = registry.render_exported();
+        assert!(output.contains("export type Core<T extends { type: string }> = { data: T };"));
+    }
+
+    #[test]
+    fn test_registry_generic_depends_on_constraint() {
+        let mut registry = TypeRegistry::new();
+
+        // First, define the constraint type
+        let discriminant = TypeDef::Named {
+            namespace: vec![],
+            name: "Discriminant".into(),
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "type",
+                TypeDef::Primitive(Primitive::String),
+            )])),
+            module: None,
+        };
+
+        // Then define a generic using that type as a constraint
+        let core_def = TypeDef::GenericDef {
+            name: "Core".into(),
+            type_params: vec![TypeParam::new("T").with_constraint(TypeDef::Ref("Discriminant".into()))],
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("data", TypeDef::TypeParamRef("T".into())),
+            ])),
+        };
+
+        registry.add_typedef(core_def);
+        registry.add_typedef(discriminant);
+
+        let sorted = registry.sorted_types();
+
+        // Discriminant should come before Core
+        let discrim_pos = sorted.iter().position(|&n| n == "Discriminant").unwrap();
+        let core_pos = sorted.iter().position(|&n| n == "Core").unwrap();
+        assert!(discrim_pos < core_pos, "Discriminant should come before Core");
+    }
+
+    #[test]
+    fn test_full_core_pattern_example() {
+        // Full example of the Core<T> pattern for rich discriminated unions
+        let mut registry = TypeRegistry::new();
+
+        // 1. Define the Core wrapper
+        let core_def = TypeDef::GenericDef {
+            name: "Core".into(),
+            type_params: vec![TypeParam::new("T").with_constraint(TypeDef::Object(vec![
+                Field::new("type", TypeDef::Primitive(Primitive::String)),
+            ]))],
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("id", TypeDef::Primitive(Primitive::String)),
+                Field::new("timestamp", TypeDef::Primitive(Primitive::Number)),
+                Field::new("data", TypeDef::TypeParamRef("T".into())),
+            ])),
+        };
+
+        // 2. Define variant types
+        let text_data = TypeDef::Named {
+            namespace: vec![],
+            name: "TextData".into(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("type", TypeDef::Literal(Literal::String("text".into()))),
+                Field::new("content", TypeDef::Primitive(Primitive::String)),
+            ])),
+            module: None,
+        };
+
+        let image_data = TypeDef::Named {
+            namespace: vec![],
+            name: "ImageData".into(),
+            def: Box::new(TypeDef::Object(vec![
+                Field::new("type", TypeDef::Literal(Literal::String("image".into()))),
+                Field::new("url", TypeDef::Primitive(Primitive::String)),
+            ])),
+            module: None,
+        };
+
+        // 3. Define wrapped message types
+        let text_message = TypeDef::Named {
+            namespace: vec![],
+            name: "TextMessage".into(),
+            def: Box::new(TypeDef::Generic {
+                base: "Core".into(),
+                args: vec![TypeDef::Ref("TextData".into())],
+            }),
+            module: None,
+        };
+
+        let image_message = TypeDef::Named {
+            namespace: vec![],
+            name: "ImageMessage".into(),
+            def: Box::new(TypeDef::Generic {
+                base: "Core".into(),
+                args: vec![TypeDef::Ref("ImageData".into())],
+            }),
+            module: None,
+        };
+
+        // 4. Define the union type
+        let message = TypeDef::Named {
+            namespace: vec![],
+            name: "Message".into(),
+            def: Box::new(TypeDef::Union(vec![
+                TypeDef::Ref("TextMessage".into()),
+                TypeDef::Ref("ImageMessage".into()),
+            ])),
+            module: None,
+        };
+
+        registry.add_typedef(core_def);
+        registry.add_typedef(text_data);
+        registry.add_typedef(image_data);
+        registry.add_typedef(text_message);
+        registry.add_typedef(image_message);
+        registry.add_typedef(message);
+
+        let output = registry.render_exported();
+
+        // Verify all types are present
+        assert!(output.contains("export type Core<T extends { type: string }>"));
+        assert!(output.contains("export type TextData ="));
+        assert!(output.contains("export type ImageData ="));
+        assert!(output.contains("export type TextMessage = Core<TextData>"));
+        assert!(output.contains("export type ImageMessage = Core<ImageData>"));
+        assert!(output.contains("export type Message = TextMessage | ImageMessage"));
     }
 
     #[test]
