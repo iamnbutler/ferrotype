@@ -240,8 +240,11 @@ struct FieldAttrs {
     flatten: bool,
     /// Override the TypeScript type with a custom string
     type_override: Option<String>,
-    /// Mark this field as optional (with ?)
+    /// Mark this field as optional (with ?) - legacy, use `optional` instead
     default: bool,
+    /// Mark this field as optional (with ?), unwrapping Option<T> to T
+    /// Unlike `default`, this extracts the inner type from Option<T>
+    optional: bool,
     /// Inline the type definition instead of using a reference
     inline: bool,
     /// Base type for indexed access (e.g., Profile in Profile["login"])
@@ -274,6 +277,8 @@ impl FieldAttrs {
                     result.type_override = Some(value.value());
                 } else if meta.path.is_ident("default") {
                     result.default = true;
+                } else if meta.path.is_ident("optional") {
+                    result.optional = true;
                 } else if meta.path.is_ident("inline") {
                     result.inline = true;
                 } else if meta.path.is_ident("index") {
@@ -392,6 +397,32 @@ fn parse_template_pattern(pattern: &str) -> syn::Result<(Vec<String>, Vec<String
     strings.push(current);
 
     Ok((strings, types))
+}
+
+/// Check if a type is `Option<T>` (or `std::option::Option<T>`)
+fn is_option_type(ty: &Type) -> bool {
+    if let Type::Path(type_path) = ty {
+        if let Some(last) = type_path.path.segments.last() {
+            return last.ident == "Option";
+        }
+    }
+    false
+}
+
+/// Extract the inner type from `Option<T>`, returns `Some(&T)` if successful
+fn extract_option_inner(ty: &Type) -> Option<&Type> {
+    if let Type::Path(type_path) = ty {
+        if let Some(last) = type_path.path.segments.last() {
+            if last.ident == "Option" {
+                if let syn::PathArguments::AngleBracketed(args) = &last.arguments {
+                    if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
+                        return Some(inner);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Convert a type name string to a TypeDef expression.
@@ -902,6 +933,16 @@ fn generate_struct_typedef(
                         let pattern = field_attrs.pattern.as_ref().unwrap();
                         let (strings, types) = parse_template_pattern(pattern)?;
                         generate_template_literal_expr(&strings, &types)
+                    } else if field_attrs.optional && is_option_type(field_type) {
+                        // For #[ts(optional)] on Option<T>, unwrap to just T
+                        // This generates `field?: T` instead of `field?: T | null`
+                        let inner_type = extract_option_inner(field_type).unwrap();
+                        let base_expr = type_to_typedef(inner_type);
+                        if field_attrs.inline {
+                            quote! { ferro_type::inline_typedef(#base_expr) }
+                        } else {
+                            base_expr
+                        }
                     } else {
                         let base_expr = type_to_typedef(field_type);
                         if field_attrs.inline {
@@ -911,8 +952,8 @@ fn generate_struct_typedef(
                         }
                     };
 
-                    // Create field (optional if default is set)
-                    if field_attrs.default {
+                    // Create field (optional if default or optional attribute is set)
+                    if field_attrs.default || field_attrs.optional {
                         regular_field_exprs.push(quote! {
                             ferro_type::Field::optional(#field_name, #type_expr)
                         });
