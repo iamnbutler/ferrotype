@@ -196,6 +196,34 @@ impl ContainerAttrs {
     }
 }
 
+/// Indexed access base type specification
+#[derive(Clone)]
+enum IndexSpec {
+    /// Rust type for compile-time validation (e.g., `index = Profile`)
+    Type(syn::Type),
+    /// String for external TypeScript types - no validation (e.g., `index = "ExternalType"`)
+    String(String),
+}
+
+/// Indexed access key specification
+#[derive(Clone)]
+enum KeySpec {
+    /// Rust identifier for compile-time validation (e.g., `key = login`)
+    Ident(syn::Ident),
+    /// String for external TypeScript keys - no validation (e.g., `key = "someKey"`)
+    String(String),
+}
+
+/// Info needed to generate compile-time validation for indexed access
+struct IndexedAccessValidation {
+    /// The base type (e.g., Profile)
+    index_type: syn::Type,
+    /// The field/key identifier (e.g., login)
+    key_ident: syn::Ident,
+    /// Unique index for naming the validation function
+    field_index: usize,
+}
+
 /// Field-level attributes
 #[derive(Default)]
 struct FieldAttrs {
@@ -211,10 +239,10 @@ struct FieldAttrs {
     default: bool,
     /// Inline the type definition instead of using a reference
     inline: bool,
-    /// Base type for indexed access (e.g., "Profile" in Profile["login"])
-    index: Option<String>,
-    /// Key for indexed access (e.g., "login" in Profile["login"])
-    key: Option<String>,
+    /// Base type for indexed access (e.g., Profile in Profile["login"])
+    index: Option<IndexSpec>,
+    /// Key for indexed access (e.g., login in Profile["login"])
+    key: Option<KeySpec>,
     /// Template literal pattern for this field (e.g., "${TOPIC}::${ULID}")
     pattern: Option<String>,
 }
@@ -244,11 +272,25 @@ impl FieldAttrs {
                 } else if meta.path.is_ident("inline") {
                     result.inline = true;
                 } else if meta.path.is_ident("index") {
-                    let value: syn::LitStr = meta.value()?.parse()?;
-                    result.index = Some(value.value());
+                    // Try to parse as Type first (for compile-time validation)
+                    // Fall back to string literal (for external TS types)
+                    let value_token = meta.value()?;
+                    if let Ok(lit_str) = value_token.parse::<syn::LitStr>() {
+                        result.index = Some(IndexSpec::String(lit_str.value()));
+                    } else {
+                        let ty: syn::Type = value_token.parse()?;
+                        result.index = Some(IndexSpec::Type(ty));
+                    }
                 } else if meta.path.is_ident("key") {
-                    let value: syn::LitStr = meta.value()?.parse()?;
-                    result.key = Some(value.value());
+                    // Try to parse as Ident first (for compile-time validation)
+                    // Fall back to string literal (for external TS types)
+                    let value_token = meta.value()?;
+                    if let Ok(lit_str) = value_token.parse::<syn::LitStr>() {
+                        result.key = Some(KeySpec::String(lit_str.value()));
+                    } else {
+                        let ident: syn::Ident = value_token.parse()?;
+                        result.key = Some(KeySpec::Ident(ident));
+                    }
                 } else if meta.path.is_ident("pattern") {
                     let value: syn::LitStr = meta.value()?.parse()?;
                     result.pattern = Some(value.value());
@@ -490,7 +532,7 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 return generate_impl(name, &type_name, &[], generics, typedef);
             }
 
-            let typedef = generate_struct_typedef(&data.fields, &container_attrs)?;
+            let (typedef, validations) = generate_struct_typedef(&data.fields, &container_attrs)?;
 
             // Handle intersection types via extends attribute
             let typedef = if let Some(ref extends_type) = container_attrs.extends {
@@ -504,7 +546,15 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 typedef
             };
 
-            generate_impl(name, &type_name, &container_attrs.namespace, generics, typedef)
+            let impl_code = generate_impl(name, &type_name, &container_attrs.namespace, generics, typedef)?;
+
+            // Generate validation code for indexed access with Type/Ident
+            let validation_code = generate_indexed_access_validations(name, &validations);
+
+            Ok(quote! {
+                #impl_code
+                #validation_code
+            })
         }
         Data::Union(_) => {
             Err(syn::Error::new_spanned(
@@ -762,17 +812,19 @@ fn generate_untagged_enum(
 fn generate_struct_typedef(
     fields: &syn::Fields,
     container_attrs: &ContainerAttrs,
-) -> syn::Result<TokenStream2> {
+) -> syn::Result<(TokenStream2, Vec<IndexedAccessValidation>)> {
     match fields {
         syn::Fields::Named(fields) => {
             // Named struct: Object with fields
             if fields.named.is_empty() {
                 // Empty struct becomes empty object
-                return Ok(quote! { ferro_type::TypeDef::Object(vec![]) });
+                return Ok((quote! { ferro_type::TypeDef::Object(vec![]) }, vec![]));
             }
 
             // Separate regular fields from flattened fields
             let mut regular_field_exprs: Vec<TokenStream2> = Vec::new();
+            let mut validations: Vec<IndexedAccessValidation> = Vec::new();
+            let mut field_index: usize = 0;
             let mut flatten_exprs: Vec<TokenStream2> = Vec::new();
 
             for f in fields.named.iter() {
@@ -788,7 +840,7 @@ fn generate_struct_typedef(
                 if field_attrs.index.is_some() != field_attrs.key.is_some() {
                     return Err(syn::Error::new_spanned(
                         f,
-                        "#[ts(index = \"...\")] and #[ts(key = \"...\")] must be used together",
+                        "#[ts(index = ...)] and #[ts(key = ...)] must be used together",
                     ));
                 }
 
@@ -809,12 +861,35 @@ fn generate_struct_typedef(
                         quote! { ferro_type::TypeDef::Ref(#type_override.to_string()) }
                     } else if field_attrs.has_indexed_access() {
                         // Use indexed access type: Profile["login"]
-                        let index_base = field_attrs.index.as_ref().unwrap();
-                        let index_key = field_attrs.key.as_ref().unwrap();
+                        let index_spec = field_attrs.index.as_ref().unwrap();
+                        let key_spec = field_attrs.key.as_ref().unwrap();
+
+                        // Get string representations for TypeDef
+                        let index_str = match index_spec {
+                            IndexSpec::Type(ty) => quote! { stringify!(#ty).to_string() },
+                            IndexSpec::String(s) => quote! { #s.to_string() },
+                        };
+                        let key_str = match key_spec {
+                            KeySpec::Ident(ident) => quote! { stringify!(#ident).to_string() },
+                            KeySpec::String(s) => quote! { #s.to_string() },
+                        };
+
+                        // Collect validation info if both are Type/Ident (not strings)
+                        if let (IndexSpec::Type(index_type), KeySpec::Ident(key_ident)) =
+                            (index_spec, key_spec)
+                        {
+                            validations.push(IndexedAccessValidation {
+                                index_type: index_type.clone(),
+                                key_ident: key_ident.clone(),
+                                field_index,
+                            });
+                            field_index += 1;
+                        }
+
                         quote! {
                             ferro_type::TypeDef::IndexedAccess {
-                                base: #index_base.to_string(),
-                                key: #index_key.to_string(),
+                                base: #index_str,
+                                key: #key_str,
                             }
                         }
                     } else if field_attrs.has_pattern() {
@@ -846,26 +921,26 @@ fn generate_struct_typedef(
 
             // If there are flattened fields, we need to build the vec dynamically
             if flatten_exprs.is_empty() {
-                Ok(quote! {
+                Ok((quote! {
                     ferro_type::TypeDef::Object(vec![#(#regular_field_exprs),*])
-                })
+                }, validations))
             } else {
-                Ok(quote! {
+                Ok((quote! {
                     {
                         let mut fields = vec![#(#regular_field_exprs),*];
                         #(fields.extend(#flatten_exprs);)*
                         ferro_type::TypeDef::Object(fields)
                     }
-                })
+                }, validations))
             }
         }
         syn::Fields::Unnamed(fields) => {
-            // Tuple struct
+            // Tuple struct - no indexed access possible
             if fields.unnamed.len() == 1 {
                 // Newtype: unwrap to inner type
                 let field_type = &fields.unnamed.first().unwrap().ty;
                 let type_expr = type_to_typedef(field_type);
-                Ok(quote! { #type_expr })
+                Ok((quote! { #type_expr }, vec![]))
             } else {
                 // Tuple: [type1, type2, ...]
                 let field_exprs: Vec<TokenStream2> = fields
@@ -874,15 +949,68 @@ fn generate_struct_typedef(
                     .map(|f| type_to_typedef(&f.ty))
                     .collect();
 
-                Ok(quote! {
+                Ok((quote! {
                     ferro_type::TypeDef::Tuple(vec![#(#field_exprs),*])
-                })
+                }, vec![]))
             }
         }
         syn::Fields::Unit => {
             // Unit struct becomes null
-            Ok(quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Null) })
+            Ok((quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Null) }, vec![]))
         }
+    }
+}
+
+/// Generate compile-time validation code for indexed access fields.
+///
+/// For each validated indexed access, generates:
+/// ```ignore
+/// const _: () = {
+///     fn _validate_indexed_access_0(p: &Profile) -> &_ { &p.login }
+/// };
+/// ```
+///
+/// This ensures that the type has the specified field at compile time.
+fn generate_indexed_access_validations(
+    struct_name: &Ident,
+    validations: &[IndexedAccessValidation],
+) -> TokenStream2 {
+    if validations.is_empty() {
+        return quote! {};
+    }
+
+    let validation_fns: Vec<TokenStream2> = validations
+        .iter()
+        .map(|v| {
+            let index_type = &v.index_type;
+            let key_ident = &v.key_ident;
+            let fn_name = syn::Ident::new(
+                &format!("_validate_indexed_access_{}", v.field_index),
+                proc_macro2::Span::call_site(),
+            );
+            // Use a simple field access that will fail to compile if the field doesn't exist
+            quote! {
+                #[allow(dead_code)]
+                fn #fn_name(__val: &#index_type) {
+                    let _ = &__val.#key_ident;
+                }
+            }
+        })
+        .collect();
+
+    let const_name = syn::Ident::new(
+        &format!(
+            "__VALIDATE_INDEXED_ACCESS_{}",
+            struct_name.to_string().to_uppercase()
+        ),
+        struct_name.span(),
+    );
+
+    quote! {
+        #[doc(hidden)]
+        const #const_name: () = {
+            #(#validation_fns)*
+        };
     }
 }
 

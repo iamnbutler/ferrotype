@@ -903,7 +903,7 @@ fn test_multiple_indexed_access() {
 // ============================================================================
 
 /// Base type for extension tests
-#[derive(TypeScript)]
+#[derive(TS)]
 struct BaseTodo {
     id: String,
     title: String,
@@ -911,7 +911,7 @@ struct BaseTodo {
 }
 
 /// Struct extending BaseTodo via intersection
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(extends = "BaseTodo")]
 struct Subtask {
     created_at: i64,
@@ -940,7 +940,7 @@ fn test_extends_declaration() {
 }
 
 /// Struct extending an external type (like Claude.Todo)
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(extends = "Claude.Todo")]
 struct ExtendingExternalType {
     custom_field: String,
@@ -965,7 +965,7 @@ fn test_extends_external_type_declaration() {
 }
 
 /// Struct extending with rename_all
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(extends = "BaseTodo", rename_all = "camelCase")]
 struct CamelCaseSubtask {
     created_at: i64,
@@ -983,7 +983,7 @@ fn test_extends_with_rename_all() {
 }
 
 /// Struct extending with type rename
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename = "EnhancedTodo", extends = "BaseTodo")]
 struct RenamedExtends {
     extra_field: String,
@@ -999,18 +999,18 @@ fn test_extends_with_type_rename() {
 }
 
 /// Tree item example from issue - combining indexed access with extends
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Tree {
     tree: Vec<TreeEntry>,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct TreeEntry {
     path: String,
     mode: String,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(extends = "TreeEntry")]
 struct Item {
     sha: String,
@@ -1026,4 +1026,46 @@ fn test_extends_with_type_override() {
     assert!(rendered.contains("&"));
     assert!(rendered.contains("sha: string"));
     assert!(rendered.contains("item_type: \"tree\" | \"blob\""));
+}
+
+// =============================================================================
+// Indexed Access with Compile-Time Validation (New Syntax)
+// =============================================================================
+
+/// Test the new identifier-based syntax that provides compile-time validation.
+/// Using `index = Profile` (Type) and `key = login` (Ident) instead of strings.
+#[derive(TS)]
+struct ValidatedIndexedAccess {
+    #[ts(index = Profile, key = login)]
+    username: String,
+    #[ts(index = Profile, key = email)]
+    user_email: String,
+}
+
+#[test]
+fn test_indexed_access_validated() {
+    let td = ValidatedIndexedAccess::typescript();
+    let rendered = inner_def(td).render();
+    // Should produce the same TypeScript output
+    assert!(rendered.contains("username: Profile[\"login\"]"));
+    assert!(rendered.contains("user_email: Profile[\"email\"]"));
+}
+
+/// Test mixing validated (identifier) and unvalidated (string) syntax
+#[derive(TS)]
+struct MixedIndexedAccess {
+    // Validated: Type and Ident
+    #[ts(index = Profile, key = avatar_url)]
+    profile_avatar: String,
+    // Unvalidated: String (for external TS types)
+    #[ts(index = "ExternalTsType", key = "someKey")]
+    external_ref: String,
+}
+
+#[test]
+fn test_indexed_access_mixed() {
+    let td = MixedIndexedAccess::typescript();
+    let rendered = inner_def(td).render();
+    assert!(rendered.contains("profile_avatar: Profile[\"avatar_url\"]"));
+    assert!(rendered.contains("external_ref: ExternalTsType[\"someKey\"]"));
 }

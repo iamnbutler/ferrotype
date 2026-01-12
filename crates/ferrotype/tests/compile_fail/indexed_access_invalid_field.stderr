@@ -1,0 +1,7 @@
+error[E0609]: no field `nonexistent` on type `&Profile`
+  --> tests/compile_fail/indexed_access_invalid_field.rs:13:33
+   |
+13 |     #[ts(index = Profile, key = nonexistent)]
+   |                                 ^^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `login`, `email`
