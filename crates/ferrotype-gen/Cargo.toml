@@ -6,7 +6,7 @@ license.workspace = true
 description = "TypeScript file generation for ferro-type"
 repository = "https://github.com/iamnbutler/ferrotype"
 documentation = "https://docs.rs/ferro-type-gen"
-readme = "../../README.md"
+readme = "README.md"
 keywords = ["typescript", "codegen", "generator", "ferro-type"]
 categories = ["development-tools", "encoding"]
 

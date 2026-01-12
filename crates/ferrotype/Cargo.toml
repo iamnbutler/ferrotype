@@ -6,7 +6,7 @@ license.workspace = true
 description = "Rust-to-TypeScript type code generation with serde compatibility"
 repository = "https://github.com/iamnbutler/ferrotype"
 documentation = "https://docs.rs/ferro-type"
-readme = "../../README.md"
+readme = "README.md"
 keywords = ["typescript", "codegen", "derive", "serde"]
 categories = ["development-tools", "encoding"]
 
