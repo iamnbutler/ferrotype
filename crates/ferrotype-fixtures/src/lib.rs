@@ -4,8 +4,8 @@
 //! These fixtures cover the full range of type patterns that
 //! ferrotype must handle correctly.
 
-use ferro_type::{Field, Primitive, TypeDef, TypeScript};
-use ferro_type_derive::TypeScript as DeriveTypeScript;
+use ferro_type::{Field, Primitive, TypeDef, TS};
+use ferro_type_derive::TS as DeriveTS;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -20,7 +20,7 @@ pub struct Point {
     pub y: f64,
 }
 
-impl TypeScript for Point {
+impl TS for Point {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -43,7 +43,7 @@ pub struct User {
     pub active: bool,
 }
 
-impl TypeScript for User {
+impl TS for User {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -68,7 +68,7 @@ pub struct Profile {
     pub avatar_url: Option<String>,
 }
 
-impl TypeScript for Profile {
+impl TS for Profile {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -97,7 +97,7 @@ impl TypeScript for Profile {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
-impl TypeScript for Rgb {
+impl TS for Rgb {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -116,7 +116,7 @@ impl TypeScript for Rgb {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Ping;
 
-impl TypeScript for Ping {
+impl TS for Ping {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -131,7 +131,7 @@ impl TypeScript for Ping {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UserId(pub u64);
 
-impl TypeScript for UserId {
+impl TS for UserId {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -149,7 +149,7 @@ pub struct Rectangle {
     pub bottom_right: Point,
 }
 
-impl TypeScript for Rectangle {
+impl TS for Rectangle {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -169,7 +169,7 @@ pub struct Polygon {
     pub vertices: Vec<Point>,
 }
 
-impl TypeScript for Polygon {
+impl TS for Polygon {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -188,7 +188,7 @@ pub struct Config {
     pub settings: HashMap<String, String>,
 }
 
-impl TypeScript for Config {
+impl TS for Config {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -217,7 +217,7 @@ pub enum Status {
     Failed,
 }
 
-impl TypeScript for Status {
+impl TS for Status {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -240,7 +240,7 @@ pub enum Coordinate {
     D3(f64, f64, f64),
 }
 
-impl TypeScript for Coordinate {
+impl TS for Coordinate {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -284,7 +284,7 @@ pub enum Message {
     Error { code: i32, message: String },
 }
 
-impl TypeScript for Message {
+impl TS for Message {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -329,7 +329,7 @@ pub struct GetUserRequest {
     pub user_id: u64,
 }
 
-impl TypeScript for GetUserRequest {
+impl TS for GetUserRequest {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -348,7 +348,7 @@ pub struct GetUserResponse {
     pub user: Option<User>,
 }
 
-impl TypeScript for GetUserResponse {
+impl TS for GetUserResponse {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -372,7 +372,7 @@ pub struct ListUsersRequest {
     pub filter: Option<String>,
 }
 
-impl TypeScript for ListUsersRequest {
+impl TS for ListUsersRequest {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -399,7 +399,7 @@ pub struct ListUsersResponse {
     pub per_page: u32,
 }
 
-impl TypeScript for ListUsersResponse {
+impl TS for ListUsersResponse {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -426,7 +426,7 @@ pub struct ApiError {
     pub message: String,
 }
 
-impl TypeScript for ApiError {
+impl TS for ApiError {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -449,7 +449,7 @@ pub struct DetailedError {
     pub field: Option<String>,
 }
 
-impl TypeScript for DetailedError {
+impl TS for DetailedError {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -481,7 +481,7 @@ pub enum RpcError {
     Internal,
 }
 
-impl TypeScript for RpcError {
+impl TS for RpcError {
     fn typescript() -> TypeDef {
         TypeDef::Named {
             namespace: vec![],
@@ -1047,11 +1047,11 @@ mod tests {
 }
 
 // ============================================================================
-// DERIVED ENUM FIXTURES (using #[derive(TypeScript)])
+// DERIVED ENUM FIXTURES (using #[derive(TS)])
 // ============================================================================
 
 /// Unit variant enum - derived
-#[derive(Debug, Clone, DeriveTypeScript)]
+#[derive(Debug, Clone, DeriveTS)]
 pub enum DerivedStatus {
     Pending,
     Active,
@@ -1060,14 +1060,14 @@ pub enum DerivedStatus {
 }
 
 /// Tuple variant enum - derived
-#[derive(Debug, Clone, DeriveTypeScript)]
+#[derive(Debug, Clone, DeriveTS)]
 pub enum DerivedCoordinate {
     D2(f64, f64),
     D3(f64, f64, f64),
 }
 
 /// Struct variant enum - derived
-#[derive(Debug, Clone, DeriveTypeScript)]
+#[derive(Debug, Clone, DeriveTS)]
 pub enum DerivedShape {
     Circle { center: Point, radius: f64 },
     Rectangle { top_left: Point, width: f64, height: f64 },
@@ -1075,7 +1075,7 @@ pub enum DerivedShape {
 }
 
 /// Mixed variant enum - derived
-#[derive(Debug, Clone, DeriveTypeScript)]
+#[derive(Debug, Clone, DeriveTS)]
 pub enum DerivedMessage {
     Ping,
     Text(String),
@@ -1084,14 +1084,14 @@ pub enum DerivedMessage {
 }
 
 /// Generic enum - derived
-#[derive(Debug, Clone, DeriveTypeScript)]
-pub enum DerivedOptionalValue<T: TypeScript> {
+#[derive(Debug, Clone, DeriveTS)]
+pub enum DerivedOptionalValue<T: TS> {
     None,
     Some(T),
 }
 
 /// Error enum - derived
-#[derive(Debug, Clone, DeriveTypeScript)]
+#[derive(Debug, Clone, DeriveTS)]
 pub enum DerivedRpcError {
     NotFound { resource: String },
     Unauthorized,

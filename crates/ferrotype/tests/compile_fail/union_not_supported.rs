@@ -1,8 +1,8 @@
-//! Test that TypeScript derive fails on union types
+//! Test that TS derive fails on union types
 
-use ferro_type::TypeScript;
+use ferro_type::TS;
 
-#[derive(TypeScript)]
+#[derive(TS)]
 union MyUnion {
     i: i32,
     f: f32,

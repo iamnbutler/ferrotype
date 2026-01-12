@@ -9,13 +9,13 @@
 //! Test with: curl http://localhost:3000/rpc/hello
 
 use axum::{routing::get, Json, Router};
-use ferro_type::TypeScript;
+use ferro_type::TS;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 
 /// Response from the hello RPC method.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TypeScript)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 pub struct HelloResponse {
     pub message: String,
 }

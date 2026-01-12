@@ -1,6 +1,6 @@
-//! Tests for #[derive(TypeScript)] on structs
+//! Tests for #[derive(TS)] on structs
 
-use ferro_type::{TypeScript, TypeDef, TypeRegistry};
+use ferro_type::{TS, TypeDef, TypeRegistry};
 
 /// Helper to get the inner definition from a Named TypeDef
 fn inner_def(td: TypeDef) -> TypeDef {
@@ -14,7 +14,7 @@ fn inner_def(td: TypeDef) -> TypeDef {
 // NAMED STRUCT TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct SimpleUser {
     id: String,
     name: String,
@@ -37,7 +37,7 @@ fn test_named_struct_name() {
     assert_eq!(td.render(), "SimpleUser");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct EmptyStruct {}
 
 #[test]
@@ -46,7 +46,7 @@ fn test_empty_struct() {
     assert_eq!(inner_def(td).render(), "{}");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct NestedStruct {
     user: SimpleUser,
     active: bool,
@@ -65,7 +65,7 @@ fn test_nested_struct() {
 // TUPLE STRUCT TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct NewtypeString(String);
 
 #[test]
@@ -75,7 +75,7 @@ fn test_newtype_struct() {
     assert_eq!(inner_def(td).render(), "string");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct TupleTwo(String, i32);
 
 #[test]
@@ -84,7 +84,7 @@ fn test_tuple_struct() {
     assert_eq!(inner_def(td).render(), "[string, number]");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct TupleThree(String, i32, bool);
 
 #[test]
@@ -97,7 +97,7 @@ fn test_tuple_three() {
 // UNIT STRUCT TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct UnitStruct;
 
 #[test]
@@ -110,7 +110,7 @@ fn test_unit_struct() {
 // GENERIC STRUCT TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Container<T> {
     value: T,
 }
@@ -124,7 +124,7 @@ fn test_generic_struct() {
     assert!(inner_def(td_i32).render().contains("value: number"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Pair<A, B> {
     first: A,
     second: B,
@@ -142,7 +142,7 @@ fn test_multi_generic_struct() {
 // COMPLEX TYPE FIELD TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct ComplexFields {
     items: Vec<String>,
     maybe_count: Option<i32>,
@@ -162,12 +162,12 @@ fn test_complex_fields() {
 // RPC REQUEST/RESPONSE PATTERN TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct GetUserRequest {
     user_id: String,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct GetUserResponse {
     id: String,
     username: String,
@@ -190,13 +190,13 @@ fn test_rpc_response_type() {
     assert!(rendered.contains("email: string | null"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct ListUsersRequest {
     page: i32,
     page_size: i32,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct ListUsersResponse {
     users: Vec<GetUserResponse>,
     total_count: i32,
@@ -224,7 +224,7 @@ fn test_list_response() {
 // RENAME ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename = "RenamedUser")]
 struct UserWithRenamedType {
     id: String,
@@ -239,7 +239,7 @@ fn test_type_rename() {
     assert_eq!(td.render_declaration(), "type RenamedUser = { id: string; name: string };");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct FieldRenameStruct {
     #[ts(rename = "userId")]
     user_id: String,
@@ -260,7 +260,7 @@ fn test_field_rename() {
     assert!(!rendered.contains("user_name:"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "camelCase")]
 struct CamelCaseStruct {
     user_id: String,
@@ -277,7 +277,7 @@ fn test_rename_all_camel_case() {
     assert!(rendered.contains("isActive: boolean"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "PascalCase")]
 struct PascalCaseStruct {
     user_id: String,
@@ -292,7 +292,7 @@ fn test_rename_all_pascal_case() {
     assert!(rendered.contains("IsActive: boolean"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "SCREAMING_SNAKE_CASE")]
 struct ScreamingSnakeStruct {
     user_id: String,
@@ -307,7 +307,7 @@ fn test_rename_all_screaming_snake() {
     assert!(rendered.contains("IS_ACTIVE: boolean"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "kebab-case")]
 struct KebabCaseStruct {
     user_id: String,
@@ -322,7 +322,7 @@ fn test_rename_all_kebab_case() {
     assert!(rendered.contains("is-active: boolean"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "camelCase")]
 struct MixedRenameStruct {
     user_id: String,
@@ -348,7 +348,7 @@ fn test_field_rename_overrides_rename_all() {
 // SKIP ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct SkipFieldStruct {
     id: String,
     name: String,
@@ -372,7 +372,7 @@ fn test_skip_field() {
     assert!(!rendered.contains("cache"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct AllSkippedStruct {
     #[ts(skip)]
     hidden1: String,
@@ -388,7 +388,7 @@ fn test_all_fields_skipped() {
     assert_eq!(rendered, "{}");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "camelCase")]
 struct SkipWithRenameAll {
     user_id: String,
@@ -413,13 +413,13 @@ fn test_skip_with_rename_all() {
 // FLATTEN ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct InnerData {
     inner_field: String,
     inner_count: i32,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct OuterWithFlatten {
     outer_id: String,
     #[ts(flatten)]
@@ -441,13 +441,13 @@ fn test_flatten_basic() {
     assert!(!rendered.contains("inner: {"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Metadata {
     created_at: String,
     updated_at: String,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Resource {
     id: String,
     #[ts(flatten)]
@@ -467,7 +467,7 @@ fn test_flatten_with_multiple_fields() {
 // TYPE OVERRIDE ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct DateFields {
     #[ts(type = "Date")]
     created_at: String,
@@ -485,7 +485,7 @@ fn test_type_override() {
     assert!(rendered.contains("name: string"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct CustomTypes {
     #[ts(type = "HTMLElement")]
     element: u64,
@@ -505,7 +505,7 @@ fn test_type_override_complex() {
 // TRANSPARENT ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(transparent)]
 struct UserId(String);
 
@@ -516,7 +516,7 @@ fn test_transparent_newtype() {
     assert_eq!(td.render(), "string");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(transparent)]
 struct Count(i32);
 
@@ -526,7 +526,7 @@ fn test_transparent_number() {
     assert_eq!(td.render(), "number");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(transparent)]
 struct Items(Vec<String>);
 
@@ -540,7 +540,7 @@ fn test_transparent_complex() {
 // DEFAULT ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct ConfigWithDefaults {
     required_field: String,
     #[ts(default)]
@@ -561,7 +561,7 @@ fn test_default_makes_optional() {
     assert!(rendered.contains("optional_name?: string"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "camelCase")]
 struct ConfigWithDefaultsAndRename {
     user_id: String,
@@ -581,13 +581,13 @@ fn test_default_with_rename() {
 // INLINE ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Address {
     street: String,
     city: String,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct PersonWithInline {
     name: String,
     #[ts(inline)]
@@ -605,12 +605,12 @@ fn test_inline_type() {
     assert!(!rendered.contains("address: Address"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct NestedType {
     value: i32,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct ContainerWithInline {
     #[ts(inline)]
     nested: NestedType,
@@ -668,7 +668,7 @@ fn test_generic_types_not_auto_registered() {
 // TEMPLATE LITERAL PATTERN TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(pattern = "vm-${string}")]
 struct VmId(String);
 
@@ -681,7 +681,7 @@ fn test_template_literal_simple() {
     assert_eq!(td.render_declaration(), "type VmId = `vm-${string}`;");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(pattern = "v${number}.${number}.${number}")]
 struct SemVer(String);
 
@@ -692,7 +692,7 @@ fn test_template_literal_semver() {
     assert_eq!(td.render_declaration(), "type SemVer = `v${number}.${number}.${number}`;");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(pattern = "/api/${string}")]
 struct ApiRoute(String);
 
@@ -702,7 +702,7 @@ fn test_template_literal_api_route() {
     assert_eq!(td.render_declaration(), "type ApiRoute = `/api/${string}`;");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(pattern = "user-${string}-id")]
 struct UserIdPattern(String);
 
@@ -712,7 +712,7 @@ fn test_template_literal_prefix_suffix() {
     assert_eq!(td.render_declaration(), "type UserIdPattern = `user-${string}-id`;");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename = "ProductID", pattern = "prod_${string}")]
 struct ProductId(String);
 
@@ -724,7 +724,7 @@ fn test_template_literal_with_rename() {
     assert_eq!(td.render_declaration(), "type ProductID = `prod_${string}`;");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(pattern = "order_${number}")]
 struct OrderId(i64);
 
@@ -739,7 +739,7 @@ fn test_template_literal_number_type() {
 // ============================================================================
 
 /// Test struct in a namespace - VM.Git.State pattern
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(namespace = "VM::Git")]
 enum GitState {
     Clean,
@@ -759,7 +759,7 @@ fn test_namespace_attribute_enum() {
     assert!(decl.contains("type GitState ="));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(namespace = "API.Models")]
 struct NamespacedConfig {
     remote: String,
@@ -778,7 +778,7 @@ fn test_namespace_attribute_struct() {
     assert!(decl.contains("type NamespacedConfig ="));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(namespace = "Util")]
 struct SingleNamespaceType {
     value: i32,
@@ -819,7 +819,7 @@ fn test_namespaced_type_in_registry() {
 // ============================================================================
 
 /// Profile type that we'll reference with indexed access
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Profile {
     login: String,
     email: String,
@@ -827,7 +827,7 @@ struct Profile {
 }
 
 /// Struct using indexed access for a field
-#[derive(TypeScript)]
+#[derive(TS)]
 struct UserCredentials {
     #[ts(index = "Profile", key = "login")]
     username: String,
@@ -845,7 +845,7 @@ fn test_indexed_access_basic() {
 }
 
 /// Struct using indexed access with camelCase renaming
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "camelCase")]
 struct ApiCredentials {
     #[ts(index = "Profile", key = "email")]
@@ -863,7 +863,7 @@ fn test_indexed_access_with_rename() {
 }
 
 /// Struct using indexed access with optional field
-#[derive(TypeScript)]
+#[derive(TS)]
 struct OptionalIndexedAccess {
     id: String,
     #[ts(index = "Profile", key = "avatar_url")]
@@ -880,7 +880,7 @@ fn test_indexed_access_with_default() {
 }
 
 /// Struct using multiple indexed access fields
-#[derive(TypeScript)]
+#[derive(TS)]
 struct MultipleIndexedAccess {
     #[ts(index = "Profile", key = "login")]
     login: String,

@@ -11,7 +11,7 @@ ferro-type = "0.1.3"
 
 ## Features
 
-- `#[derive(TypeScript)]` for structs and enums
+- `#[derive(TS)]` for structs and enums
 - Structured `TypeDef` IR instead of string concatenation
 - `TypeRegistry` for collecting types and rendering in dependency order
 - Serde-compatible attributes (`rename`, `rename_all`, `skip`, `flatten`, etc.)
@@ -23,9 +23,9 @@ ferro-type = "0.1.3"
 ### Basic Derive
 
 ```rust
-use ferrotype::TypeScript;
+use ferrotype::TS;
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct User {
     id: String,
     name: String,
@@ -38,10 +38,10 @@ struct User {
 ### Enums
 
 ```rust
-use ferrotype::TypeScript;
+use ferrotype::TS;
 
 // Unit variants become string literal unions
-#[derive(TypeScript)]
+#[derive(TS)]
 enum Status {
     Pending,
     Active,
@@ -50,7 +50,7 @@ enum Status {
 // Renders as: "Pending" | "Active" | "Completed"
 
 // Data variants become discriminated unions
-#[derive(TypeScript)]
+#[derive(TS)]
 enum Message {
     Ping,
     Text(String),
@@ -62,15 +62,15 @@ enum Message {
 ### TypeRegistry
 
 ```rust
-use ferrotype::{TypeScript, TypeRegistry};
+use ferrotype::{TS, TypeRegistry};
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct User {
     id: String,
     name: String,
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 struct Post {
     title: String,
     author: User,

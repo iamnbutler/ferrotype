@@ -6,7 +6,7 @@
 //!
 //! # Core Design
 //!
-//! The core abstraction is the [`TypeScript`] trait, modeled after serde's `Serialize`.
+//! The core abstraction is the [`TS`] trait, modeled after serde's `Serialize`.
 //! Rather than returning strings directly, it returns a [`TypeDef`] intermediate
 //! representation that can be:
 //! - Rendered to TypeScript syntax
@@ -14,6 +14,9 @@
 //! - Deduplicated for cleaner output
 //! - Extended for additional targets
 
+pub use ferro_type_derive::TS;
+#[deprecated(since = "0.2.0", note = "use `TS` instead")]
+#[allow(deprecated)]
 pub use ferro_type_derive::TypeScript;
 pub use linkme;
 
@@ -63,11 +66,11 @@ pub static TYPESCRIPT_TYPES: [fn() -> TypeDef];
 /// # Example
 ///
 /// ```ignore
-/// use ferrotype::{TypeScript, TypeDef, Primitive};
+/// use ferrotype::{TS, TypeDef, Primitive};
 ///
 /// struct UserId(String);
 ///
-/// impl TypeScript for UserId {
+/// impl TS for UserId {
 ///     fn typescript() -> TypeDef {
 ///         TypeDef::Named {
 ///             namespace: vec![],
@@ -77,10 +80,16 @@ pub static TYPESCRIPT_TYPES: [fn() -> TypeDef];
 ///     }
 /// }
 /// ```
-pub trait TypeScript {
+pub trait TS {
     /// Returns the TypeScript type definition for this type.
     fn typescript() -> TypeDef;
 }
+
+/// Deprecated: Use [`TS`] instead.
+///
+/// This is a deprecated alias for backwards compatibility. It will be removed in v0.3.0.
+#[deprecated(since = "0.2.0", note = "use `TS` instead")]
+pub trait TypeScript: TS {}
 
 /// Intermediate representation for TypeScript types.
 ///
@@ -747,11 +756,11 @@ impl TypeRegistry {
         }
     }
 
-    /// Registers a type that implements TypeScript.
+    /// Registers a type that implements TS.
     ///
     /// This extracts all named types from the type definition and adds them
     /// to the registry. Named types are deduplicated by name.
-    pub fn register<T: TypeScript>(&mut self) {
+    pub fn register<T: TS>(&mut self) {
         let typedef = T::typescript();
         self.add_typedef(typedef);
     }
@@ -1132,43 +1141,43 @@ impl TypeRegistry {
 }
 
 // ============================================================================
-// TypeScript TRAIT IMPLEMENTATIONS FOR PRIMITIVES
+// TS TRAIT IMPLEMENTATIONS FOR PRIMITIVES
 // ============================================================================
 
-impl TypeScript for () {
+impl TS for () {
     fn typescript() -> TypeDef {
         TypeDef::Primitive(Primitive::Void)
     }
 }
 
-impl TypeScript for bool {
+impl TS for bool {
     fn typescript() -> TypeDef {
         TypeDef::Primitive(Primitive::Boolean)
     }
 }
 
-impl TypeScript for String {
+impl TS for String {
     fn typescript() -> TypeDef {
         TypeDef::Primitive(Primitive::String)
     }
 }
 
-impl TypeScript for &str {
+impl TS for &str {
     fn typescript() -> TypeDef {
         TypeDef::Primitive(Primitive::String)
     }
 }
 
-impl TypeScript for char {
+impl TS for char {
     fn typescript() -> TypeDef {
         TypeDef::Primitive(Primitive::String)
     }
 }
 
-macro_rules! impl_typescript_number {
+macro_rules! impl_ts_number {
     ($($t:ty),*) => {
         $(
-            impl TypeScript for $t {
+            impl TS for $t {
                 fn typescript() -> TypeDef {
                     TypeDef::Primitive(Primitive::Number)
                 }
@@ -1177,68 +1186,68 @@ macro_rules! impl_typescript_number {
     };
 }
 
-impl_typescript_number!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
+impl_ts_number!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
 
 // i128/u128 map to bigint in TypeScript
-impl TypeScript for i128 {
+impl TS for i128 {
     fn typescript() -> TypeDef {
         TypeDef::Primitive(Primitive::BigInt)
     }
 }
 
-impl TypeScript for u128 {
+impl TS for u128 {
     fn typescript() -> TypeDef {
         TypeDef::Primitive(Primitive::BigInt)
     }
 }
 
 // ============================================================================
-// TypeScript TRAIT IMPLEMENTATIONS FOR GENERIC TYPES
+// TS TRAIT IMPLEMENTATIONS FOR GENERIC TYPES
 // ============================================================================
 
-impl<T: TypeScript> TypeScript for Option<T> {
+impl<T: TS> TS for Option<T> {
     fn typescript() -> TypeDef {
         TypeDef::Union(vec![T::typescript(), TypeDef::Primitive(Primitive::Null)])
     }
 }
 
-impl<T: TypeScript> TypeScript for Vec<T> {
+impl<T: TS> TS for Vec<T> {
     fn typescript() -> TypeDef {
         TypeDef::Array(Box::new(T::typescript()))
     }
 }
 
-impl<T: TypeScript> TypeScript for Box<T> {
+impl<T: TS> TS for Box<T> {
     fn typescript() -> TypeDef {
         T::typescript()
     }
 }
 
-impl<T: TypeScript> TypeScript for std::rc::Rc<T> {
+impl<T: TS> TS for std::rc::Rc<T> {
     fn typescript() -> TypeDef {
         T::typescript()
     }
 }
 
-impl<T: TypeScript> TypeScript for std::sync::Arc<T> {
+impl<T: TS> TS for std::sync::Arc<T> {
     fn typescript() -> TypeDef {
         T::typescript()
     }
 }
 
-impl<T: TypeScript> TypeScript for std::cell::RefCell<T> {
+impl<T: TS> TS for std::cell::RefCell<T> {
     fn typescript() -> TypeDef {
         T::typescript()
     }
 }
 
-impl<T: TypeScript> TypeScript for std::cell::Cell<T> {
+impl<T: TS> TS for std::cell::Cell<T> {
     fn typescript() -> TypeDef {
         T::typescript()
     }
 }
 
-impl<K: TypeScript, V: TypeScript> TypeScript for HashMap<K, V> {
+impl<K: TS, V: TS> TS for HashMap<K, V> {
     fn typescript() -> TypeDef {
         TypeDef::Record {
             key: Box::new(K::typescript()),
@@ -1247,7 +1256,7 @@ impl<K: TypeScript, V: TypeScript> TypeScript for HashMap<K, V> {
     }
 }
 
-impl<K: TypeScript, V: TypeScript> TypeScript for std::collections::BTreeMap<K, V> {
+impl<K: TS, V: TS> TS for std::collections::BTreeMap<K, V> {
     fn typescript() -> TypeDef {
         TypeDef::Record {
             key: Box::new(K::typescript()),
@@ -1256,7 +1265,7 @@ impl<K: TypeScript, V: TypeScript> TypeScript for std::collections::BTreeMap<K, 
     }
 }
 
-impl<T: TypeScript, E: TypeScript> TypeScript for Result<T, E> {
+impl<T: TS, E: TS> TS for Result<T, E> {
     fn typescript() -> TypeDef {
         TypeDef::Union(vec![
             TypeDef::Object(vec![
@@ -1272,28 +1281,28 @@ impl<T: TypeScript, E: TypeScript> TypeScript for Result<T, E> {
 }
 
 // ============================================================================
-// TypeScript TRAIT IMPLEMENTATIONS FOR TUPLES
+// TS TRAIT IMPLEMENTATIONS FOR TUPLES
 // ============================================================================
 
-impl<A: TypeScript> TypeScript for (A,) {
+impl<A: TS> TS for (A,) {
     fn typescript() -> TypeDef {
         TypeDef::Tuple(vec![A::typescript()])
     }
 }
 
-impl<A: TypeScript, B: TypeScript> TypeScript for (A, B) {
+impl<A: TS, B: TS> TS for (A, B) {
     fn typescript() -> TypeDef {
         TypeDef::Tuple(vec![A::typescript(), B::typescript()])
     }
 }
 
-impl<A: TypeScript, B: TypeScript, C: TypeScript> TypeScript for (A, B, C) {
+impl<A: TS, B: TS, C: TS> TS for (A, B, C) {
     fn typescript() -> TypeDef {
         TypeDef::Tuple(vec![A::typescript(), B::typescript(), C::typescript()])
     }
 }
 
-impl<A: TypeScript, B: TypeScript, C: TypeScript, D: TypeScript> TypeScript for (A, B, C, D) {
+impl<A: TS, B: TS, C: TS, D: TS> TS for (A, B, C, D) {
     fn typescript() -> TypeDef {
         TypeDef::Tuple(vec![
             A::typescript(),
@@ -1304,7 +1313,7 @@ impl<A: TypeScript, B: TypeScript, C: TypeScript, D: TypeScript> TypeScript for 
     }
 }
 
-impl<A: TypeScript, B: TypeScript, C: TypeScript, D: TypeScript, E: TypeScript> TypeScript
+impl<A: TS, B: TS, C: TS, D: TS, E: TS> TS
     for (A, B, C, D, E)
 {
     fn typescript() -> TypeDef {
@@ -1318,8 +1327,8 @@ impl<A: TypeScript, B: TypeScript, C: TypeScript, D: TypeScript, E: TypeScript> 
     }
 }
 
-impl<A: TypeScript, B: TypeScript, C: TypeScript, D: TypeScript, E: TypeScript, F: TypeScript>
-    TypeScript for (A, B, C, D, E, F)
+impl<A: TS, B: TS, C: TS, D: TS, E: TS, F: TS>
+    TS for (A, B, C, D, E, F)
 {
     fn typescript() -> TypeDef {
         TypeDef::Tuple(vec![
@@ -1342,7 +1351,7 @@ mod tests {
     use super::*;
 
     // ========================================================================
-    // TypeScript TRAIT + TypeDef TESTS
+    // TS TRAIT + TypeDef TESTS
     // ========================================================================
 
     #[test]
@@ -2012,7 +2021,7 @@ mod tests {
         age: u32,
     }
 
-    impl TypeScript for AutoRegTestUser {
+    impl TS for AutoRegTestUser {
         fn typescript() -> TypeDef {
             TypeDef::Named {
                 namespace: vec![],

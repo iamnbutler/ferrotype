@@ -1,9 +1,9 @@
-//! Tests for #[derive(TypeScript)] on enums
+//! Tests for #[derive(TS)] on enums
 //!
 //! These tests verify that the derive macro generates correct TypeScript
 //! discriminated union types for various enum patterns.
 
-use ferro_type::{TypeScript, TypeDef, Primitive};
+use ferro_type::{TS, TypeDef, Primitive};
 
 /// Helper to get the inner definition from a Named TypeDef
 fn inner_def(td: TypeDef) -> TypeDef {
@@ -17,7 +17,7 @@ fn inner_def(td: TypeDef) -> TypeDef {
 // UNIT VARIANT TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum SimpleStatus {
     Pending,
     Active,
@@ -32,7 +32,7 @@ fn test_unit_variant_enum() {
     assert_eq!(td.render(), "SimpleStatus");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum SingleVariant {
     Only,
 }
@@ -48,7 +48,7 @@ fn test_single_unit_variant() {
 // TUPLE VARIANT TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum Coordinate {
     D2(f64, f64),
     D3(f64, f64, f64),
@@ -65,7 +65,7 @@ fn test_tuple_variant_enum() {
     assert_eq!(td.render(), "Coordinate");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum NewtypeWrapper {
     Text(String),
     Number(i32),
@@ -89,13 +89,13 @@ struct Point {
     _y: f64,
 }
 
-impl TypeScript for Point {
+impl TS for Point {
     fn typescript() -> TypeDef {
         TypeDef::Ref("Point".to_string())
     }
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum Shape {
     Circle { center: Point, radius: f64 },
     Rectangle { width: f64, height: f64 },
@@ -116,7 +116,7 @@ fn test_struct_variant_enum() {
 // MIXED VARIANT TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum Message {
     Ping,
     Text(String),
@@ -139,7 +139,7 @@ fn test_mixed_variant_enum() {
 // GENERIC ENUM TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum OptionalValue<T> {
     None,
     Some(T),
@@ -161,7 +161,7 @@ fn test_generic_enum() {
     );
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum ResultLike<T, E> {
     Ok(T),
     Err(E),
@@ -180,7 +180,7 @@ fn test_multi_generic_enum() {
 // COMPLEX NESTED TYPE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum ComplexVariants {
     Empty,
     Simple(String),
@@ -217,7 +217,7 @@ fn test_derive_enum_snapshots() {
 // RENAME ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename = "RenamedStatus")]
 enum StatusWithRenamedType {
     Active,
@@ -230,7 +230,7 @@ fn test_enum_type_rename() {
     assert_eq!(td.render(), "RenamedStatus");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum VariantRenameEnum {
     #[ts(rename = "active")]
     Active,
@@ -245,7 +245,7 @@ fn test_enum_variant_rename() {
     assert_eq!(rendered, r#""active" | "inactive""#);
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "camelCase")]
 enum CamelCaseEnum {
     FirstVariant,
@@ -260,7 +260,7 @@ fn test_enum_rename_all_camel_case() {
     assert_eq!(rendered, r#""firstVariant" | "secondVariant" | "thirdOption""#);
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "snake_case")]
 enum SnakeCaseEnum {
     FirstVariant,
@@ -274,7 +274,7 @@ fn test_enum_rename_all_snake_case() {
     assert_eq!(rendered, r#""first_variant" | "second_variant""#);
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "SCREAMING_SNAKE_CASE")]
 enum ScreamingEnum {
     FirstVariant,
@@ -288,7 +288,7 @@ fn test_enum_rename_all_screaming() {
     assert_eq!(rendered, r#""FIRST_VARIANT" | "SECOND_VARIANT""#);
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "camelCase")]
 enum MixedRenameEnum {
     FirstVariant,
@@ -308,7 +308,7 @@ fn test_enum_variant_rename_overrides_rename_all() {
     assert!(!rendered.contains(r#""secondVariant""#));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(rename_all = "camelCase")]
 enum DataVariantRenameEnum {
     #[ts(rename = "textMessage")]
@@ -329,7 +329,7 @@ fn test_data_variant_rename() {
 // SKIP ATTRIBUTE TESTS
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 enum EnumWithSkippedField {
     Error {
         code: i32,
@@ -354,7 +354,7 @@ fn test_enum_variant_field_skip() {
 // TAG ATTRIBUTE TESTS - #[ts(tag = "...")]
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(tag = "kind")]
 enum CustomTagEnum {
     Ping,
@@ -374,7 +374,7 @@ fn test_custom_tag_field_name() {
     assert!(!rendered.contains(r#"type: "#));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(tag = "t")]
 enum ShortTagEnum {
     A,
@@ -393,7 +393,7 @@ fn test_short_tag_name() {
 // CONTENT ATTRIBUTE TESTS - #[ts(content = "...")]
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(tag = "t", content = "c")]
 enum AdjacentTaggedEnum {
     Text(String),
@@ -411,7 +411,7 @@ fn test_adjacent_tagging_newtype() {
     assert!(rendered.contains(r#"{ t: "Tuple"; c: [number, number] }"#));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(tag = "tag", content = "data")]
 enum AdjacentStructVariant {
     Error { code: i32, message: String },
@@ -427,7 +427,7 @@ fn test_adjacent_tagging_struct_variant() {
     assert!(rendered.contains(r#"{ tag: "Info"; data: { text: string } }"#));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(tag = "kind", content = "value")]
 enum AdjacentMixedVariants {
     Ping,
@@ -454,7 +454,7 @@ fn test_adjacent_tagging_mixed_variants() {
 // UNTAGGED ATTRIBUTE TESTS - #[ts(untagged)]
 // ============================================================================
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(untagged)]
 enum UntaggedValue {
     Num(i32),
@@ -470,7 +470,7 @@ fn test_untagged_newtype_variants() {
     assert_eq!(rendered, "number | string | boolean");
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(untagged)]
 enum UntaggedMixed {
     Null,
@@ -493,7 +493,7 @@ fn test_untagged_mixed_variants() {
     assert!(rendered.contains("{ name: string }"));
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(untagged)]
 enum UntaggedUnitEnum {
     A,
@@ -509,7 +509,7 @@ fn test_untagged_unit_variants() {
     assert_eq!(rendered, r#""A" | "B" | "C""#);
 }
 
-#[derive(TypeScript)]
+#[derive(TS)]
 #[ts(untagged, rename_all = "camelCase")]
 enum UntaggedWithRename {
     FirstItem,

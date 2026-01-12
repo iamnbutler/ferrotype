@@ -1,7 +1,8 @@
 //! Derive macros for ferrotype TypeScript type generation
 //!
 //! This crate provides:
-//! - `#[derive(TypeScript)]` for generating TypeScript type definitions from Rust types
+//! - `#[derive(TS)]` for generating TypeScript type definitions from Rust types
+//! - `#[derive(TypeScript)]` (deprecated alias for `TS`)
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -386,7 +387,7 @@ fn generate_template_literal_expr(strings: &[String], types: &[String]) -> Token
 ///
 /// ## Unit variants
 /// ```ignore
-/// #[derive(TypeScript)]
+/// #[derive(TS)]
 /// enum Status {
 ///     Pending,
 ///     Active,
@@ -397,7 +398,7 @@ fn generate_template_literal_expr(strings: &[String], types: &[String]) -> Token
 ///
 /// ## Tuple variants
 /// ```ignore
-/// #[derive(TypeScript)]
+/// #[derive(TS)]
 /// enum Coordinate {
 ///     D2(f64, f64),
 ///     D3(f64, f64, f64),
@@ -407,7 +408,7 @@ fn generate_template_literal_expr(strings: &[String], types: &[String]) -> Token
 ///
 /// ## Struct variants
 /// ```ignore
-/// #[derive(TypeScript)]
+/// #[derive(TS)]
 /// enum Shape {
 ///     Circle { center: Point, radius: f64 },
 ///     Rectangle { x: f64, y: f64, width: f64, height: f64 },
@@ -417,7 +418,7 @@ fn generate_template_literal_expr(strings: &[String], types: &[String]) -> Token
 ///
 /// ## Structs
 /// ```ignore
-/// #[derive(TypeScript)]
+/// #[derive(TS)]
 /// struct User {
 ///     id: String,
 ///     name: String,
@@ -425,6 +426,20 @@ fn generate_template_literal_expr(strings: &[String], types: &[String]) -> Token
 /// }
 /// // Generates: { id: string; name: string; age: number }
 /// ```
+#[proc_macro_derive(TS, attributes(ts))]
+pub fn derive_ts(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    match expand_derive_typescript(&input) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Deprecated: Use `#[derive(TS)]` instead.
+///
+/// This is a deprecated alias for backwards compatibility. It will be removed in v0.3.0.
+#[deprecated(since = "0.2.0", note = "use `#[derive(TS)]` instead")]
 #[proc_macro_derive(TypeScript, attributes(ts))]
 pub fn derive_typescript(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -781,7 +796,7 @@ fn generate_struct_typedef(
                     // For flattened fields, we extract the inner type's fields at runtime
                     flatten_exprs.push(quote! {
                         {
-                            let inner_td = <#field_type as ferro_type::TypeScript>::typescript();
+                            let inner_td = <#field_type as ferro_type::TS>::typescript();
                             ferro_type::extract_object_fields(&inner_td)
                         }
                     });
@@ -872,9 +887,9 @@ fn generate_struct_typedef(
 }
 
 /// Convert a Rust type to its TypeScript TypeDef representation.
-/// Uses TypeScript trait for types that implement it.
+/// Uses TS trait for types that implement it.
 fn type_to_typedef(ty: &Type) -> TokenStream2 {
-    quote! { <#ty as ferro_type::TypeScript>::typescript() }
+    quote! { <#ty as ferro_type::TS>::typescript() }
 }
 
 /// Generate implementation for a transparent newtype wrapper.
@@ -886,7 +901,7 @@ fn generate_transparent_impl(
 ) -> syn::Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    // Add TypeScript bounds to generic parameters
+    // Add TS bounds to generic parameters
     let where_clause = if generics.params.is_empty() {
         where_clause.cloned()
     } else {
@@ -902,7 +917,7 @@ fn generate_transparent_impl(
             where_clause.cloned()
         } else {
             let bounds = type_params.iter().map(|p| {
-                quote! { #p: ferro_type::TypeScript }
+                quote! { #p: ferro_type::TS }
             });
 
             if let Some(existing_where) = where_clause {
@@ -915,9 +930,9 @@ fn generate_transparent_impl(
     };
 
     Ok(quote! {
-        impl #impl_generics ferro_type::TypeScript for #name #ty_generics #where_clause {
+        impl #impl_generics ferro_type::TS for #name #ty_generics #where_clause {
             fn typescript() -> ferro_type::TypeDef {
-                <#inner_type as ferro_type::TypeScript>::typescript()
+                <#inner_type as ferro_type::TS>::typescript()
             }
         }
     })
@@ -932,7 +947,7 @@ fn generate_impl(
 ) -> syn::Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    // Add TypeScript bounds to generic parameters
+    // Add TS bounds to generic parameters
     let where_clause = if generics.params.is_empty() {
         where_clause.cloned()
     } else {
@@ -948,7 +963,7 @@ fn generate_impl(
             where_clause.cloned()
         } else {
             let bounds = type_params.iter().map(|p| {
-                quote! { #p: ferro_type::TypeScript }
+                quote! { #p: ferro_type::TS }
             });
 
             if let Some(existing_where) = where_clause {
@@ -970,7 +985,7 @@ fn generate_impl(
         quote! {
             #[ferro_type::linkme::distributed_slice(ferro_type::TYPESCRIPT_TYPES)]
             #[linkme(crate = ferro_type::linkme)]
-            static #register_name: fn() -> ferro_type::TypeDef = || <#name as ferro_type::TypeScript>::typescript();
+            static #register_name: fn() -> ferro_type::TypeDef = || <#name as ferro_type::TS>::typescript();
         }
     } else {
         quote! {}
@@ -985,7 +1000,7 @@ fn generate_impl(
     };
 
     Ok(quote! {
-        impl #impl_generics ferro_type::TypeScript for #name #ty_generics #where_clause {
+        impl #impl_generics ferro_type::TS for #name #ty_generics #where_clause {
             fn typescript() -> ferro_type::TypeDef {
                 ferro_type::TypeDef::Named {
                     namespace: #namespace_expr,

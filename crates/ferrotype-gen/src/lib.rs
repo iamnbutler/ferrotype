@@ -1,15 +1,15 @@
 //! TypeScript file generation for ferro-type
 //!
 //! This crate provides utilities for generating TypeScript definition files
-//! from Rust types that implement the `TypeScript` trait.
+//! from Rust types that implement the `TS` trait.
 //!
 //! # Example
 //!
 //! ```ignore
-//! use ferro_type::TypeScript;
+//! use ferro_type::TS;
 //! use ferro_type_gen::{Config, Generator, ExportStyle};
 //!
-//! #[derive(TypeScript)]
+//! #[derive(TS)]
 //! struct User {
 //!     id: String,
 //!     name: String,
@@ -44,7 +44,7 @@
 //! }
 //! ```
 
-use ferro_type::{TypeDef, TypeRegistry, TypeScript};
+use ferro_type::{TypeDef, TypeRegistry, TS};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -142,9 +142,9 @@ impl Generator {
 
     /// Register a type for generation
     ///
-    /// The type must implement the `TypeScript` trait (usually via derive).
+    /// The type must implement the `TS` trait (usually via derive).
     /// Returns `&mut Self` for method chaining.
-    pub fn register<T: TypeScript>(&mut self) -> &mut Self {
+    pub fn register<T: TS>(&mut self) -> &mut Self {
         self.registry.register::<T>();
         self
     }
@@ -462,7 +462,7 @@ impl Default for Generator {
 /// Generate TypeScript for a single type
 ///
 /// Returns the TypeScript definition as a string.
-pub fn generate<T: TypeScript>() -> String {
+pub fn generate<T: TS>() -> String {
     let mut generator = Generator::with_defaults();
     generator.register::<T>();
     generator.generate()
