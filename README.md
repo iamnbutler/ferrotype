@@ -108,6 +108,51 @@ let output = registry.render();
 | `#[ts(type = "Date")]` | Override TypeScript type |
 | `#[ts(default)]` | Mark field as optional (`?`) |
 | `#[ts(inline)]` | Inline type definition instead of reference |
+| `#[ts(pattern = "${A}::${B}")]` | Template literal type |
+| `#[ts(index = "T", key = "k")]` | Indexed access type (`T["k"]`) |
+
+### Advanced Features
+
+#### Intersection Types
+
+Extend existing TypeScript types:
+
+```rust
+#[derive(TypeScript)]
+#[ts(extends = "Claude.Todo")]
+struct Subtask {
+    #[ts(type = "UNIX")]
+    created_at: i64,
+    file_changes: Option<Vec<FileChange>>,
+}
+// Renders as: type Subtask = Claude.Todo & { created_at: UNIX; ... }
+```
+
+#### Template Literals
+
+Generate branded ID types:
+
+```rust
+#[derive(TypeScript)]
+struct Message {
+    #[ts(pattern = "${TOPIC}::${ULID}")]
+    id: String,
+}
+// Renders as: id: `${TOPIC}::${ULID}`
+```
+
+#### Indexed Access
+
+Reference nested type properties:
+
+```rust
+#[derive(TypeScript)]
+struct Response {
+    #[ts(index = "Profile", key = "login")]
+    author: String,
+}
+// Renders as: author: Profile["login"]
+```
 
 ### Rename Conventions
 
