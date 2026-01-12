@@ -9,7 +9,7 @@ keywords = ["typescript", "codegen", "rust", "types"]
 categories = ["development-tools", "encoding"]
 
 [dependencies]
-ferro-type = { version = "0.1.3", path = "../ferrotype" }
+ferro-type = { version = "0.2.0", path = "../ferrotype" }
 swc_core = { version = "54", features = ["ecma_parser", "ecma_ast", "common"] }
 convert_case = "0.6"
 
