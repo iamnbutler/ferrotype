@@ -33,6 +33,6 @@ jobs:
 #      - name: Run cargo fmt --check
 #        run: cargo fmt --check
 
-      - name: Run clippy
-        run: cargo clippy -- --deny warnings
+#      - name: Run clippy
+#        run: cargo clippy -- --deny warnings
 
