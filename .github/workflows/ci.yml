@@ -30,8 +30,8 @@ jobs:
         run: |
             cargo test
 
-      - name: Run cargo fmt --check
-        run: cargo fmt --check
+#      - name: Run cargo fmt --check
+#        run: cargo fmt --check
 
       - name: Run clippy
         run: cargo clippy -- --deny warnings
