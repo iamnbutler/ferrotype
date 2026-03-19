@@ -2,8 +2,9 @@
 //!
 //! These tests verify that the derive macro generates correct TypeScript
 //! discriminated union types for various enum patterns.
+#![allow(dead_code, clippy::enum_variant_names)]
 
-use ferro_type::{TS, TypeDef, Primitive};
+use ferro_type::{TypeDef, TS};
 
 /// Helper to get the inner definition from a Named TypeDef
 fn inner_def(td: TypeDef) -> TypeDef {
@@ -205,12 +206,30 @@ fn test_complex_nested_types() {
 
 #[test]
 fn test_derive_enum_snapshots() {
-    insta::assert_snapshot!("derive_unit_enum", inner_def(SimpleStatus::typescript()).render());
-    insta::assert_snapshot!("derive_tuple_enum", inner_def(Coordinate::typescript()).render());
-    insta::assert_snapshot!("derive_struct_enum", inner_def(Shape::typescript()).render());
-    insta::assert_snapshot!("derive_mixed_enum", inner_def(Message::typescript()).render());
-    insta::assert_snapshot!("derive_generic_enum_string", inner_def(<OptionalValue<String>>::typescript()).render());
-    insta::assert_snapshot!("derive_generic_enum_i32", inner_def(<OptionalValue<i32>>::typescript()).render());
+    insta::assert_snapshot!(
+        "derive_unit_enum",
+        inner_def(SimpleStatus::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "derive_tuple_enum",
+        inner_def(Coordinate::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "derive_struct_enum",
+        inner_def(Shape::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "derive_mixed_enum",
+        inner_def(Message::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "derive_generic_enum_string",
+        inner_def(<OptionalValue<String>>::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "derive_generic_enum_i32",
+        inner_def(<OptionalValue<i32>>::typescript()).render()
+    );
 }
 
 // ============================================================================
@@ -257,7 +276,10 @@ enum CamelCaseEnum {
 fn test_enum_rename_all_camel_case() {
     let td = CamelCaseEnum::typescript();
     let rendered = inner_def(td).render();
-    assert_eq!(rendered, r#""firstVariant" | "secondVariant" | "thirdOption""#);
+    assert_eq!(
+        rendered,
+        r#""firstVariant" | "secondVariant" | "thirdOption""#
+    );
 }
 
 #[derive(TS)]
@@ -532,9 +554,24 @@ fn test_untagged_with_rename_all() {
 
 #[test]
 fn test_tag_content_untagged_snapshots() {
-    insta::assert_snapshot!("custom_tag_enum", inner_def(CustomTagEnum::typescript()).render());
-    insta::assert_snapshot!("adjacent_tagged_enum", inner_def(AdjacentTaggedEnum::typescript()).render());
-    insta::assert_snapshot!("adjacent_struct_variant", inner_def(AdjacentStructVariant::typescript()).render());
-    insta::assert_snapshot!("untagged_value", inner_def(UntaggedValue::typescript()).render());
-    insta::assert_snapshot!("untagged_mixed", inner_def(UntaggedMixed::typescript()).render());
+    insta::assert_snapshot!(
+        "custom_tag_enum",
+        inner_def(CustomTagEnum::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "adjacent_tagged_enum",
+        inner_def(AdjacentTaggedEnum::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "adjacent_struct_variant",
+        inner_def(AdjacentStructVariant::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "untagged_value",
+        inner_def(UntaggedValue::typescript()).render()
+    );
+    insta::assert_snapshot!(
+        "untagged_mixed",
+        inner_def(UntaggedMixed::typescript()).render()
+    );
 }

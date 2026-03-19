@@ -17,6 +17,7 @@ use syn::{
 
 /// Case conversion strategies for rename_all
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(clippy::enum_variant_names)]
 enum RenameAll {
     /// camelCase
     CamelCase,
@@ -182,7 +183,7 @@ impl ContainerAttrs {
                     // Parse namespace path - supports both "::" and "." as separators
                     let ns_str = value.value();
                     result.namespace = ns_str
-                        .split(|c| c == ':' || c == '.')
+                        .split([':', '.'])
                         .filter(|s| !s.is_empty())
                         .map(|s| s.to_string())
                         .collect();
@@ -366,7 +367,7 @@ fn parse_template_pattern(pattern: &str) -> syn::Result<(Vec<String>, Vec<String
 
             let mut type_name = String::new();
             let mut depth = 1;
-            while let Some(tc) = chars.next() {
+            for tc in chars.by_ref() {
                 if tc == '{' {
                     depth += 1;
                     type_name.push(tc);
@@ -446,10 +447,13 @@ fn type_name_to_typedef(name: &str) -> TokenStream2 {
 /// Generate a TemplateLiteral TypeDef expression from parsed pattern.
 fn generate_template_literal_expr(strings: &[String], types: &[String]) -> TokenStream2 {
     let string_literals: Vec<_> = strings.iter().map(|s| quote! { #s.to_string() }).collect();
-    let type_exprs: Vec<_> = types.iter().map(|t| {
-        let typedef = type_name_to_typedef(t);
-        quote! { Box::new(#typedef) }
-    }).collect();
+    let type_exprs: Vec<_> = types
+        .iter()
+        .map(|t| {
+            let typedef = type_name_to_typedef(t);
+            quote! { Box::new(#typedef) }
+        })
+        .collect();
 
     quote! {
         ferro_type::TypeDef::TemplateLiteral {
@@ -544,7 +548,14 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
     match &input.data {
         Data::Enum(data) => {
             let typedef = generate_enum_typedef(&data.variants, &container_attrs)?;
-            generate_impl(name, &type_name, &container_attrs.namespace, &container_attrs.wrapper, generics, typedef)
+            generate_impl(
+                name,
+                &type_name,
+                &container_attrs.namespace,
+                &container_attrs.wrapper,
+                generics,
+                typedef,
+            )
         }
         Data::Struct(data) => {
             // Handle transparent newtypes - they become the inner type directly
@@ -565,7 +576,14 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
             if let Some(ref pattern) = container_attrs.pattern {
                 let (strings, types) = parse_template_pattern(pattern)?;
                 let typedef = generate_template_literal_expr(&strings, &types);
-                return generate_impl(name, &type_name, &[], &container_attrs.wrapper, generics, typedef);
+                return generate_impl(
+                    name,
+                    &type_name,
+                    &[],
+                    &container_attrs.wrapper,
+                    generics,
+                    typedef,
+                );
             }
 
             let (typedef, validations) = generate_struct_typedef(&data.fields, &container_attrs)?;
@@ -582,7 +600,14 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 typedef
             };
 
-            let impl_code = generate_impl(name, &type_name, &container_attrs.namespace, &container_attrs.wrapper, generics, typedef)?;
+            let impl_code = generate_impl(
+                name,
+                &type_name,
+                &container_attrs.namespace,
+                &container_attrs.wrapper,
+                generics,
+                typedef,
+            )?;
 
             // Generate validation code for indexed access with Type/Ident
             let validation_code = generate_indexed_access_validations(name, &validations);
@@ -592,12 +617,10 @@ fn expand_derive_typescript(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #validation_code
             })
         }
-        Data::Union(_) => {
-            Err(syn::Error::new_spanned(
-                input,
-                "TypeScript derive is not supported for unions",
-            ))
-        }
+        Data::Union(_) => Err(syn::Error::new_spanned(
+            input,
+            "TypeScript derive is not supported for unions",
+        )),
     }
 }
 
@@ -646,11 +669,8 @@ fn generate_enum_typedef(
 
         for variant in variants.iter() {
             let variant_attrs = FieldAttrs::from_attrs(&variant.attrs)?;
-            let variant_name_str = get_field_name(
-                &variant.ident.to_string(),
-                &variant_attrs,
-                container_attrs,
-            );
+            let variant_name_str =
+                get_field_name(&variant.ident.to_string(), &variant_attrs, container_attrs);
 
             let expr = match &variant.fields {
                 Fields::Unit => {
@@ -786,11 +806,8 @@ fn generate_untagged_enum(
 
     for variant in variants.iter() {
         let variant_attrs = FieldAttrs::from_attrs(&variant.attrs)?;
-        let variant_name_str = get_field_name(
-            &variant.ident.to_string(),
-            &variant_attrs,
-            container_attrs,
-        );
+        let variant_name_str =
+            get_field_name(&variant.ident.to_string(), &variant_attrs, container_attrs);
 
         let expr = match &variant.fields {
             Fields::Unit => {
@@ -967,17 +984,23 @@ fn generate_struct_typedef(
 
             // If there are flattened fields, we need to build the vec dynamically
             if flatten_exprs.is_empty() {
-                Ok((quote! {
-                    ferro_type::TypeDef::Object(vec![#(#regular_field_exprs),*])
-                }, validations))
+                Ok((
+                    quote! {
+                        ferro_type::TypeDef::Object(vec![#(#regular_field_exprs),*])
+                    },
+                    validations,
+                ))
             } else {
-                Ok((quote! {
-                    {
-                        let mut fields = vec![#(#regular_field_exprs),*];
-                        #(fields.extend(#flatten_exprs);)*
-                        ferro_type::TypeDef::Object(fields)
-                    }
-                }, validations))
+                Ok((
+                    quote! {
+                        {
+                            let mut fields = vec![#(#regular_field_exprs),*];
+                            #(fields.extend(#flatten_exprs);)*
+                            ferro_type::TypeDef::Object(fields)
+                        }
+                    },
+                    validations,
+                ))
             }
         }
         syn::Fields::Unnamed(fields) => {
@@ -995,14 +1018,20 @@ fn generate_struct_typedef(
                     .map(|f| type_to_typedef(&f.ty))
                     .collect();
 
-                Ok((quote! {
-                    ferro_type::TypeDef::Tuple(vec![#(#field_exprs),*])
-                }, vec![]))
+                Ok((
+                    quote! {
+                        ferro_type::TypeDef::Tuple(vec![#(#field_exprs),*])
+                    },
+                    vec![],
+                ))
             }
         }
         syn::Fields::Unit => {
             // Unit struct becomes null
-            Ok((quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Null) }, vec![]))
+            Ok((
+                quote! { ferro_type::TypeDef::Primitive(ferro_type::Primitive::Null) },
+                vec![],
+            ))
         }
     }
 }
@@ -1079,13 +1108,17 @@ fn generate_transparent_impl(
     let where_clause = if generics.params.is_empty() {
         where_clause.cloned()
     } else {
-        let type_params: Vec<_> = generics.params.iter().filter_map(|p| {
-            if let GenericParam::Type(tp) = p {
-                Some(&tp.ident)
-            } else {
-                None
-            }
-        }).collect();
+        let type_params: Vec<_> = generics
+            .params
+            .iter()
+            .filter_map(|p| {
+                if let GenericParam::Type(tp) = p {
+                    Some(&tp.ident)
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         if type_params.is_empty() {
             where_clause.cloned()
@@ -1126,13 +1159,17 @@ fn generate_impl(
     let where_clause = if generics.params.is_empty() {
         where_clause.cloned()
     } else {
-        let type_params: Vec<_> = generics.params.iter().filter_map(|p| {
-            if let GenericParam::Type(tp) = p {
-                Some(&tp.ident)
-            } else {
-                None
-            }
-        }).collect();
+        let type_params: Vec<_> = generics
+            .params
+            .iter()
+            .filter_map(|p| {
+                if let GenericParam::Type(tp) = p {
+                    Some(&tp.ident)
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         if type_params.is_empty() {
             where_clause.cloned()

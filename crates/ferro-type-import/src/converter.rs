@@ -45,11 +45,7 @@ fn convert_interface(iface: &TsInterfaceDecl) -> Option<TsTypeInfo> {
 
     // Handle generic type parameters
     let typedef = if let Some(ref type_params) = iface.type_params {
-        let params: Vec<TypeParam> = type_params
-            .params
-            .iter()
-            .map(convert_type_param)
-            .collect();
+        let params: Vec<TypeParam> = type_params.params.iter().map(convert_type_param).collect();
 
         TypeDef::GenericDef {
             name: name.clone(),
@@ -80,11 +76,7 @@ fn convert_type_alias(alias: &TsTypeAliasDecl) -> Option<TsTypeInfo> {
 
     // Handle generic type parameters
     let typedef = if let Some(ref type_params) = alias.type_params {
-        let params: Vec<TypeParam> = type_params
-            .params
-            .iter()
-            .map(convert_type_param)
-            .collect();
+        let params: Vec<TypeParam> = type_params.params.iter().map(convert_type_param).collect();
 
         TypeDef::GenericDef {
             name: name.clone(),
@@ -119,7 +111,7 @@ fn convert_ts_enum(ts_enum: &TsEnumDecl) -> Option<TsTypeInfo> {
     let variants: Vec<TypeDef> = ts_enum
         .members
         .iter()
-        .filter_map(|member| {
+        .map(|member| {
             // Get the member name
             let member_name = match &member.id {
                 TsEnumMemberId::Ident(ident) => ident.sym.to_string(),
@@ -129,18 +121,18 @@ fn convert_ts_enum(ts_enum: &TsEnumDecl) -> Option<TsTypeInfo> {
             // Check if there's an explicit initializer
             if let Some(init) = &member.init {
                 match init.as_ref() {
-                    Expr::Lit(Lit::Str(s)) => {
-                        Some(TypeDef::Literal(Literal::String(s.value.as_str().unwrap_or("").to_string())))
-                    }
-                    Expr::Lit(Lit::Num(n)) => Some(TypeDef::Literal(Literal::Number(n.value))),
+                    Expr::Lit(Lit::Str(s)) => TypeDef::Literal(Literal::String(
+                        s.value.as_str().unwrap_or("").to_string(),
+                    )),
+                    Expr::Lit(Lit::Num(n)) => TypeDef::Literal(Literal::Number(n.value)),
                     _ => {
                         // Use member name as the literal value for computed initializers
-                        Some(TypeDef::Literal(Literal::String(member_name)))
+                        TypeDef::Literal(Literal::String(member_name))
                     }
                 }
             } else {
                 // No initializer - use member name as string literal
-                Some(TypeDef::Literal(Literal::String(member_name)))
+                TypeDef::Literal(Literal::String(member_name))
             }
         })
         .collect();
@@ -224,9 +216,7 @@ fn convert_property_signature(prop: &TsPropertySignature) -> Option<Field> {
 fn convert_ts_type(ts_type: &TsType) -> TypeDef {
     match ts_type {
         TsType::TsKeywordType(kw) => convert_keyword_type(kw),
-        TsType::TsArrayType(arr) => {
-            TypeDef::Array(Box::new(convert_ts_type(&arr.elem_type)))
-        }
+        TsType::TsArrayType(arr) => TypeDef::Array(Box::new(convert_ts_type(&arr.elem_type))),
         TsType::TsUnionOrIntersectionType(union_or_inter) => {
             convert_union_or_intersection(union_or_inter)
         }
@@ -248,11 +238,11 @@ fn convert_ts_type(ts_type: &TsType) -> TypeDef {
         TsType::TsMappedType(_) => TypeDef::Primitive(Primitive::Any), // Mapped types - complex
         TsType::TsConditionalType(_) => TypeDef::Primitive(Primitive::Any), // Conditional types
         TsType::TsInferType(_) => TypeDef::Primitive(Primitive::Any), // infer keyword
-        TsType::TsThisType(_) => TypeDef::Primitive(Primitive::Any), // this type
+        TsType::TsThisType(_) => TypeDef::Primitive(Primitive::Any),  // this type
         TsType::TsTypeOperator(_) => TypeDef::Primitive(Primitive::Any), // keyof, readonly, unique
         TsType::TsRestType(rest) => TypeDef::Array(Box::new(convert_ts_type(&rest.type_ann))),
         TsType::TsTypePredicate(_) => TypeDef::Primitive(Primitive::Boolean), // Type predicates
-        TsType::TsImportType(_) => TypeDef::Primitive(Primitive::Any), // import("...").Type
+        TsType::TsImportType(_) => TypeDef::Primitive(Primitive::Any),        // import("...").Type
     }
 }
 
@@ -392,7 +382,9 @@ fn convert_type_literal(lit: &TsTypeLit) -> TypeDef {
 /// Convert literal types (string literals, number literals, etc.).
 fn convert_literal_type(lit: &TsLitType) -> TypeDef {
     match &lit.lit {
-        TsLit::Str(s) => TypeDef::Literal(Literal::String(s.value.as_str().unwrap_or("").to_string())),
+        TsLit::Str(s) => {
+            TypeDef::Literal(Literal::String(s.value.as_str().unwrap_or("").to_string()))
+        }
         TsLit::Number(n) => TypeDef::Literal(Literal::Number(n.value)),
         TsLit::Bool(b) => TypeDef::Literal(Literal::Boolean(b.value)),
         TsLit::BigInt(_) => TypeDef::Primitive(Primitive::BigInt),
@@ -596,7 +588,9 @@ mod tests {
         if let TypeDef::Named { def, .. } = &types[0].typedef {
             if let TypeDef::Union(variants) = def.as_ref() {
                 assert_eq!(variants.len(), 2);
-                assert!(matches!(&variants[0], TypeDef::Literal(Literal::String(s)) if s == "active"));
+                assert!(
+                    matches!(&variants[0], TypeDef::Literal(Literal::String(s)) if s == "active")
+                );
             }
         }
     }
@@ -632,7 +626,9 @@ mod tests {
         if let TypeDef::Named { def, .. } = &types[0].typedef {
             if let TypeDef::Union(variants) = def.as_ref() {
                 assert_eq!(variants.len(), 3);
-                assert!(matches!(&variants[0], TypeDef::Literal(Literal::String(s)) if s == "Active"));
+                assert!(
+                    matches!(&variants[0], TypeDef::Literal(Literal::String(s)) if s == "Active")
+                );
             } else {
                 panic!("Expected Union typedef");
             }

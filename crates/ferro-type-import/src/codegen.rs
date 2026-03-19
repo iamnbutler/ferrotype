@@ -43,7 +43,7 @@ fn generate_named_type(name: &str, def: &TypeDef, is_interface: bool) -> String 
     match def {
         TypeDef::Object(fields) if is_interface => generate_struct(name, fields, &[]),
         TypeDef::Union(variants) => generate_union_type(name, variants),
-        TypeDef::Primitive(p) => generate_type_alias(name, &primitive_to_rust(p)),
+        TypeDef::Primitive(p) => generate_type_alias(name, primitive_to_rust(p)),
         TypeDef::Array(inner) => {
             let inner_type = typedef_to_rust_type(inner);
             generate_type_alias(name, &format!("Vec<{}>", inner_type))
@@ -102,10 +102,7 @@ fn generate_generic_type(
         }
         _ => {
             let rust_type = typedef_to_rust_type(def);
-            format!(
-                "pub type {}<{}> = {};",
-                name, params_str, rust_type
-            )
+            format!("pub type {}<{}> = {};", name, params_str, rust_type)
         }
     }
 }
@@ -161,7 +158,9 @@ fn generate_struct(name: &str, fields: &[Field], _type_params: &[TypeParam]) -> 
 /// - A type alias to a more complex type
 fn generate_union_type(name: &str, variants: &[TypeDef]) -> String {
     // Check if this is a string literal union (common for status types)
-    let all_string_literals = variants.iter().all(|v| matches!(v, TypeDef::Literal(Literal::String(_))));
+    let all_string_literals = variants
+        .iter()
+        .all(|v| matches!(v, TypeDef::Literal(Literal::String(_))));
 
     if all_string_literals {
         return generate_string_enum(name, variants);
@@ -265,10 +264,8 @@ fn generate_discriminated_enum(name: &str, variants: &[TypeDef], discriminant: &
                 let variant_name = value.to_case(Case::Pascal);
 
                 // Get other fields (excluding discriminant)
-                let other_fields: Vec<_> = fields
-                    .iter()
-                    .filter(|f| f.name != *discriminant)
-                    .collect();
+                let other_fields: Vec<_> =
+                    fields.iter().filter(|f| f.name != *discriminant).collect();
 
                 output.push_str(&format!("    #[serde(rename = \"{}\")]\n", value));
 
@@ -284,7 +281,10 @@ fn generate_discriminated_enum(name: &str, variants: &[TypeDef], discriminant: &
                             typedef_to_rust_type(&field.ty)
                         };
                         if rust_name != field.name {
-                            output.push_str(&format!("        #[serde(rename = \"{}\")]\n", field.name));
+                            output.push_str(&format!(
+                                "        #[serde(rename = \"{}\")]\n",
+                                field.name
+                            ));
                         }
                         output.push_str(&format!("        {}: {},\n", rust_name, rust_type));
                     }
@@ -366,7 +366,6 @@ fn generate_intersection_type(name: &str, types: &[TypeDef]) -> String {
 
     generate_struct(name, &all_fields, &[])
 }
-
 
 /// Generate a type alias.
 fn generate_type_alias(name: &str, rust_type: &str) -> String {
@@ -464,12 +463,14 @@ mod tests {
 
     #[test]
     fn test_generate_simple_struct() {
-        let output = generate(r#"
+        let output = generate(
+            r#"
             interface User {
                 id: string;
                 name: string;
             }
-        "#);
+        "#,
+        );
 
         assert!(output.contains("pub struct User"));
         assert!(output.contains("pub id: String"));
@@ -478,12 +479,14 @@ mod tests {
 
     #[test]
     fn test_generate_optional_field() {
-        let output = generate(r#"
+        let output = generate(
+            r#"
             interface Config {
                 required: string;
                 optional?: number;
             }
-        "#);
+        "#,
+        );
 
         assert!(output.contains("pub required: String"));
         assert!(output.contains("pub optional: Option<f64>"));
@@ -492,12 +495,14 @@ mod tests {
 
     #[test]
     fn test_generate_camel_case_rename() {
-        let output = generate(r#"
+        let output = generate(
+            r#"
             interface User {
                 firstName: string;
                 lastName: string;
             }
-        "#);
+        "#,
+        );
 
         assert!(output.contains("pub first_name: String"));
         assert!(output.contains("rename_all = \"camelCase\""));
@@ -505,11 +510,13 @@ mod tests {
 
     #[test]
     fn test_generate_array_type() {
-        let output = generate(r#"
+        let output = generate(
+            r#"
             interface Container {
                 items: string[];
             }
-        "#);
+        "#,
+        );
 
         assert!(output.contains("pub items: Vec<String>"));
     }
@@ -538,11 +545,13 @@ mod tests {
 
     #[test]
     fn test_generate_discriminated_union() {
-        let output = generate(r#"
+        let output = generate(
+            r#"
             type Message =
                 | { type: "text"; content: string }
                 | { type: "image"; url: string };
-        "#);
+        "#,
+        );
 
         assert!(output.contains("pub enum Message"));
         assert!(output.contains("#[serde(tag = \"type\")]"));
@@ -552,9 +561,11 @@ mod tests {
 
     #[test]
     fn test_generate_intersection_type() {
-        let output = generate(r#"
+        let output = generate(
+            r#"
             type Combined = { name: string } & { age: number };
-        "#);
+        "#,
+        );
 
         assert!(output.contains("pub struct Combined"));
         assert!(output.contains("pub name: String"));
@@ -563,13 +574,15 @@ mod tests {
 
     #[test]
     fn test_generate_ts_enum() {
-        let output = generate(r#"
+        let output = generate(
+            r#"
             enum Status {
                 Active,
                 Inactive,
                 Pending
             }
-        "#);
+        "#,
+        );
 
         assert!(output.contains("pub enum Status"));
         assert!(output.contains("Active"));
@@ -579,12 +592,14 @@ mod tests {
 
     #[test]
     fn test_generate_ts_enum_with_string_values() {
-        let output = generate(r#"
+        let output = generate(
+            r#"
             enum Direction {
                 Up = "UP",
                 Down = "DOWN"
             }
-        "#);
+        "#,
+        );
 
         assert!(output.contains("pub enum Direction"));
         // The variant names will be "Up" and "Down" (PascalCase)
