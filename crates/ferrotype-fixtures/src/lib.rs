@@ -77,18 +77,27 @@ impl TS for Profile {
             name: "Profile".to_string(),
             def: Box::new(TypeDef::Object(vec![
                 Field::new("username", TypeDef::Primitive(Primitive::String)),
-                Field::new("display_name", TypeDef::Union(vec![
-                    TypeDef::Primitive(Primitive::String),
-                    TypeDef::Primitive(Primitive::Null),
-                ])),
-                Field::new("bio", TypeDef::Union(vec![
-                    TypeDef::Primitive(Primitive::String),
-                    TypeDef::Primitive(Primitive::Null),
-                ])),
-                Field::new("avatar_url", TypeDef::Union(vec![
-                    TypeDef::Primitive(Primitive::String),
-                    TypeDef::Primitive(Primitive::Null),
-                ])),
+                Field::new(
+                    "display_name",
+                    TypeDef::Union(vec![
+                        TypeDef::Primitive(Primitive::String),
+                        TypeDef::Primitive(Primitive::Null),
+                    ]),
+                ),
+                Field::new(
+                    "bio",
+                    TypeDef::Union(vec![
+                        TypeDef::Primitive(Primitive::String),
+                        TypeDef::Primitive(Primitive::Null),
+                    ]),
+                ),
+                Field::new(
+                    "avatar_url",
+                    TypeDef::Union(vec![
+                        TypeDef::Primitive(Primitive::String),
+                        TypeDef::Primitive(Primitive::Null),
+                    ]),
+                ),
             ])),
             module: None,
             wrapper: None,
@@ -181,9 +190,10 @@ impl TS for Polygon {
         TypeDef::Named {
             namespace: vec![],
             name: "Polygon".to_string(),
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("vertices", TypeDef::Array(Box::new(TypeDef::Ref("Point".to_string())))),
-            ])),
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "vertices",
+                TypeDef::Array(Box::new(TypeDef::Ref("Point".to_string()))),
+            )])),
             module: None,
             wrapper: None,
         }
@@ -201,12 +211,13 @@ impl TS for Config {
         TypeDef::Named {
             namespace: vec![],
             name: "Config".to_string(),
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("settings", TypeDef::Record {
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "settings",
+                TypeDef::Record {
                     key: Box::new(TypeDef::Primitive(Primitive::String)),
                     value: Box::new(TypeDef::Primitive(Primitive::String)),
-                }),
-            ])),
+                },
+            )])),
             module: None,
             wrapper: None,
         }
@@ -257,19 +268,31 @@ impl TS for Coordinate {
             name: "Coordinate".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("D2".to_string()))),
-                    Field::new("value", TypeDef::Tuple(vec![
-                        TypeDef::Primitive(Primitive::Number),
-                        TypeDef::Primitive(Primitive::Number),
-                    ])),
+                    Field::new(
+                        "type",
+                        TypeDef::Literal(ferro_type::Literal::String("D2".to_string())),
+                    ),
+                    Field::new(
+                        "value",
+                        TypeDef::Tuple(vec![
+                            TypeDef::Primitive(Primitive::Number),
+                            TypeDef::Primitive(Primitive::Number),
+                        ]),
+                    ),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("D3".to_string()))),
-                    Field::new("value", TypeDef::Tuple(vec![
-                        TypeDef::Primitive(Primitive::Number),
-                        TypeDef::Primitive(Primitive::Number),
-                        TypeDef::Primitive(Primitive::Number),
-                    ])),
+                    Field::new(
+                        "type",
+                        TypeDef::Literal(ferro_type::Literal::String("D3".to_string())),
+                    ),
+                    Field::new(
+                        "value",
+                        TypeDef::Tuple(vec![
+                            TypeDef::Primitive(Primitive::Number),
+                            TypeDef::Primitive(Primitive::Number),
+                            TypeDef::Primitive(Primitive::Number),
+                        ]),
+                    ),
                 ]),
             ])),
             module: None,
@@ -281,9 +304,20 @@ impl TS for Coordinate {
 /// Enum with struct variants
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Shape {
-    Circle { center: Point, radius: f64 },
-    Rectangle { top_left: Point, width: f64, height: f64 },
-    Triangle { a: Point, b: Point, c: Point },
+    Circle {
+        center: Point,
+        radius: f64,
+    },
+    Rectangle {
+        top_left: Point,
+        width: f64,
+        height: f64,
+    },
+    Triangle {
+        a: Point,
+        b: Point,
+        c: Point,
+    },
 }
 
 /// Mixed variant enum (unit, tuple, and struct variants)
@@ -301,19 +335,32 @@ impl TS for Message {
             namespace: vec![],
             name: "Message".to_string(),
             def: Box::new(TypeDef::Union(vec![
+                TypeDef::Object(vec![Field::new(
+                    "type",
+                    TypeDef::Literal(ferro_type::Literal::String("Ping".to_string())),
+                )]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Ping".to_string()))),
-                ]),
-                TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Text".to_string()))),
+                    Field::new(
+                        "type",
+                        TypeDef::Literal(ferro_type::Literal::String("Text".to_string())),
+                    ),
                     Field::new("value", TypeDef::Primitive(Primitive::String)),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Binary".to_string()))),
-                    Field::new("value", TypeDef::Array(Box::new(TypeDef::Primitive(Primitive::Number)))),
+                    Field::new(
+                        "type",
+                        TypeDef::Literal(ferro_type::Literal::String("Binary".to_string())),
+                    ),
+                    Field::new(
+                        "value",
+                        TypeDef::Array(Box::new(TypeDef::Primitive(Primitive::Number))),
+                    ),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Error".to_string()))),
+                    Field::new(
+                        "type",
+                        TypeDef::Literal(ferro_type::Literal::String("Error".to_string())),
+                    ),
                     Field::new("code", TypeDef::Primitive(Primitive::Number)),
                     Field::new("message", TypeDef::Primitive(Primitive::String)),
                 ]),
@@ -346,9 +393,10 @@ impl TS for GetUserRequest {
         TypeDef::Named {
             namespace: vec![],
             name: "GetUserRequest".to_string(),
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("user_id", TypeDef::Primitive(Primitive::Number)),
-            ])),
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "user_id",
+                TypeDef::Primitive(Primitive::Number),
+            )])),
             module: None,
             wrapper: None,
         }
@@ -366,12 +414,13 @@ impl TS for GetUserResponse {
         TypeDef::Named {
             namespace: vec![],
             name: "GetUserResponse".to_string(),
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("user", TypeDef::Union(vec![
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "user",
+                TypeDef::Union(vec![
                     TypeDef::Ref("User".to_string()),
                     TypeDef::Primitive(Primitive::Null),
-                ])),
-            ])),
+                ]),
+            )])),
             module: None,
             wrapper: None,
         }
@@ -394,10 +443,13 @@ impl TS for ListUsersRequest {
             def: Box::new(TypeDef::Object(vec![
                 Field::new("page", TypeDef::Primitive(Primitive::Number)),
                 Field::new("per_page", TypeDef::Primitive(Primitive::Number)),
-                Field::new("filter", TypeDef::Union(vec![
-                    TypeDef::Primitive(Primitive::String),
-                    TypeDef::Primitive(Primitive::Null),
-                ])),
+                Field::new(
+                    "filter",
+                    TypeDef::Union(vec![
+                        TypeDef::Primitive(Primitive::String),
+                        TypeDef::Primitive(Primitive::Null),
+                    ]),
+                ),
             ])),
             module: None,
             wrapper: None,
@@ -420,7 +472,10 @@ impl TS for ListUsersResponse {
             namespace: vec![],
             name: "ListUsersResponse".to_string(),
             def: Box::new(TypeDef::Object(vec![
-                Field::new("users", TypeDef::Array(Box::new(TypeDef::Ref("User".to_string())))),
+                Field::new(
+                    "users",
+                    TypeDef::Array(Box::new(TypeDef::Ref("User".to_string()))),
+                ),
                 Field::new("total", TypeDef::Primitive(Primitive::Number)),
                 Field::new("page", TypeDef::Primitive(Primitive::Number)),
                 Field::new("per_page", TypeDef::Primitive(Primitive::Number)),
@@ -474,14 +529,20 @@ impl TS for DetailedError {
             def: Box::new(TypeDef::Object(vec![
                 Field::new("code", TypeDef::Primitive(Primitive::String)),
                 Field::new("message", TypeDef::Primitive(Primitive::String)),
-                Field::new("details", TypeDef::Union(vec![
-                    TypeDef::Primitive(Primitive::String),
-                    TypeDef::Primitive(Primitive::Null),
-                ])),
-                Field::new("field", TypeDef::Union(vec![
-                    TypeDef::Primitive(Primitive::String),
-                    TypeDef::Primitive(Primitive::Null),
-                ])),
+                Field::new(
+                    "details",
+                    TypeDef::Union(vec![
+                        TypeDef::Primitive(Primitive::String),
+                        TypeDef::Primitive(Primitive::Null),
+                    ]),
+                ),
+                Field::new(
+                    "field",
+                    TypeDef::Union(vec![
+                        TypeDef::Primitive(Primitive::String),
+                        TypeDef::Primitive(Primitive::Null),
+                    ]),
+                ),
             ])),
             module: None,
             wrapper: None,
@@ -506,24 +567,35 @@ impl TS for RpcError {
             name: "RpcError".to_string(),
             def: Box::new(TypeDef::Union(vec![
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("NotFound".to_string()))),
+                    Field::new(
+                        "type",
+                        TypeDef::Literal(ferro_type::Literal::String("NotFound".to_string())),
+                    ),
                     Field::new("resource", TypeDef::Primitive(Primitive::String)),
                 ]),
+                TypeDef::Object(vec![Field::new(
+                    "type",
+                    TypeDef::Literal(ferro_type::Literal::String("Unauthorized".to_string())),
+                )]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Unauthorized".to_string()))),
-                ]),
-                TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Forbidden".to_string()))),
+                    Field::new(
+                        "type",
+                        TypeDef::Literal(ferro_type::Literal::String("Forbidden".to_string())),
+                    ),
                     Field::new("reason", TypeDef::Primitive(Primitive::String)),
                 ]),
                 TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("BadRequest".to_string()))),
+                    Field::new(
+                        "type",
+                        TypeDef::Literal(ferro_type::Literal::String("BadRequest".to_string())),
+                    ),
                     Field::new("field", TypeDef::Primitive(Primitive::String)),
                     Field::new("message", TypeDef::Primitive(Primitive::String)),
                 ]),
-                TypeDef::Object(vec![
-                    Field::new("type", TypeDef::Literal(ferro_type::Literal::String("Internal".to_string()))),
-                ]),
+                TypeDef::Object(vec![Field::new(
+                    "type",
+                    TypeDef::Literal(ferro_type::Literal::String("Internal".to_string())),
+                )]),
             ])),
             module: None,
             wrapper: None,
@@ -613,7 +685,10 @@ mod tests {
         fn test_point_roundtrip() {
             assert_roundtrip(Point { x: 0.0, y: 0.0 });
             assert_roundtrip(Point { x: -1.5, y: 2.5 });
-            assert_roundtrip(Point { x: f64::MAX, y: f64::MIN });
+            assert_roundtrip(Point {
+                x: f64::MAX,
+                y: f64::MIN,
+            });
             assert_json_format(&Point { x: 1.0, y: 2.0 }, r#"{"x":1.0,"y":2.0}"#);
         }
 
@@ -946,14 +1021,12 @@ mod tests {
                     email: "owner@example.com".to_string(),
                     active: true,
                 },
-                members: vec![
-                    User {
-                        id: 2,
-                        name: "Member".to_string(),
-                        email: "member@example.com".to_string(),
-                        active: true,
-                    },
-                ],
+                members: vec![User {
+                    id: 2,
+                    name: "Member".to_string(),
+                    email: "member@example.com".to_string(),
+                    active: true,
+                }],
                 settings: Config { settings },
                 status: Status::Active,
             });
@@ -1108,9 +1181,20 @@ pub enum DerivedCoordinate {
 /// Struct variant enum - derived
 #[derive(Debug, Clone, DeriveTS)]
 pub enum DerivedShape {
-    Circle { center: Point, radius: f64 },
-    Rectangle { top_left: Point, width: f64, height: f64 },
-    Triangle { a: Point, b: Point, c: Point },
+    Circle {
+        center: Point,
+        radius: f64,
+    },
+    Rectangle {
+        top_left: Point,
+        width: f64,
+        height: f64,
+    },
+    Triangle {
+        a: Point,
+        b: Point,
+        c: Point,
+    },
 }
 
 /// Mixed variant enum - derived
@@ -1253,9 +1337,21 @@ mod derive_tests {
         let td = PrettifiedUser::typescript();
         let decl = td.render_declaration();
         // Should output: type PrettifiedUser = Prettify<{ id: number; name: string }>;
-        assert!(decl.contains("Prettify<"), "Should have Prettify wrapper, got: {}", decl);
-        assert!(decl.contains("id: number"), "Should have id field, got: {}", decl);
-        assert!(decl.contains("name: string"), "Should have name field, got: {}", decl);
+        assert!(
+            decl.contains("Prettify<"),
+            "Should have Prettify wrapper, got: {}",
+            decl
+        );
+        assert!(
+            decl.contains("id: number"),
+            "Should have id field, got: {}",
+            decl
+        );
+        assert!(
+            decl.contains("name: string"),
+            "Should have name field, got: {}",
+            decl
+        );
     }
 
     #[test]
@@ -1263,9 +1359,25 @@ mod derive_tests {
         let td = RequiredConfig::typescript();
         let decl = td.render_declaration();
         // Should output: type RequiredConfig = Prettify<Required<{ theme: string; language: string }>>;
-        assert!(decl.contains("Prettify<Required<"), "Should have chained wrapper, got: {}", decl);
-        assert!(decl.contains(">>"), "Should have closing brackets, got: {}", decl);
-        assert!(decl.contains("theme: string"), "Should have theme field, got: {}", decl);
-        assert!(decl.contains("language: string"), "Should have language field, got: {}", decl);
+        assert!(
+            decl.contains("Prettify<Required<"),
+            "Should have chained wrapper, got: {}",
+            decl
+        );
+        assert!(
+            decl.contains(">>"),
+            "Should have closing brackets, got: {}",
+            decl
+        );
+        assert!(
+            decl.contains("theme: string"),
+            "Should have theme field, got: {}",
+            decl
+        );
+        assert!(
+            decl.contains("language: string"),
+            "Should have language field, got: {}",
+            decl
+        );
     }
 }

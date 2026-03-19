@@ -14,10 +14,10 @@
 //! - Deduplicated for cleaner output
 //! - Extended for additional targets
 
-pub use ferro_type_derive::TS;
 #[deprecated(since = "0.2.0", note = "use `TS` instead")]
 #[allow(deprecated)]
 pub use ferro_type_derive::TypeScript;
+pub use ferro_type_derive::TS;
 pub use linkme;
 
 use std::collections::HashMap;
@@ -169,10 +169,7 @@ pub enum TypeDef {
     },
 
     /// A generic type application: `Generic<T1, T2>`
-    Generic {
-        base: String,
-        args: Vec<TypeDef>,
-    },
+    Generic { base: String, args: Vec<TypeDef> },
 
     /// An indexed access type: `T["K"]`
     ///
@@ -225,7 +222,7 @@ pub enum TypeDef {
     /// This is for **defining** a generic type with parameters.
     /// For example: `type Core<T extends { type: string }> = { id: string; data: T }`
     ///
-    /// # The Core<T> Pattern
+    /// # The `Core<T>` Pattern
     ///
     /// A common pattern for rich discriminated unions wraps variants in a generic:
     ///
@@ -476,7 +473,9 @@ impl TypeDef {
             TypeDef::Record { key, value } => {
                 format!("Record<{}, {}>", key.render(), value.render())
             }
-            TypeDef::Named { namespace, name, .. } => {
+            TypeDef::Named {
+                namespace, name, ..
+            } => {
                 if namespace.is_empty() {
                     name.clone()
                 } else {
@@ -500,7 +499,11 @@ impl TypeDef {
                 format!("{}<{}>", base, args_str.join(", "))
             }
             TypeDef::IndexedAccess { base, key } => {
-                format!("{}[\"{}\"]", base, key.replace('\\', "\\\\").replace('"', "\\\""))
+                format!(
+                    "{}[\"{}\"]",
+                    base,
+                    key.replace('\\', "\\\\").replace('"', "\\\"")
+                )
             }
             TypeDef::TemplateLiteral { strings, types } => {
                 let mut result = String::from("`");
@@ -538,7 +541,13 @@ impl TypeDef {
     /// For other types, this just returns the rendered type.
     pub fn render_declaration(&self) -> String {
         match self {
-            TypeDef::Named { namespace, name, def, wrapper, .. } => {
+            TypeDef::Named {
+                namespace,
+                name,
+                def,
+                wrapper,
+                ..
+            } => {
                 let def_rendered = def.render();
                 let wrapped = match wrapper {
                     Some(w) => Self::apply_wrapper(w, &def_rendered),
@@ -553,7 +562,12 @@ impl TypeDef {
                 def,
             } => {
                 let params_str: Vec<_> = type_params.iter().map(|p| p.render()).collect();
-                format!("type {}<{}> = {};", name, params_str.join(", "), def.render())
+                format!(
+                    "type {}<{}> = {};",
+                    name,
+                    params_str.join(", "),
+                    def.render()
+                )
             }
             _ => self.render(),
         }
@@ -809,7 +823,12 @@ impl TypeRegistry {
     /// Recursively extracts all Named types from a TypeDef.
     fn extract_named_types(&mut self, typedef: &TypeDef) {
         match typedef {
-            TypeDef::Named { namespace, name, def, .. } => {
+            TypeDef::Named {
+                namespace,
+                name,
+                def,
+                ..
+            } => {
                 // Use fully qualified name as the key (e.g., "VM.Git.State")
                 let qualified_name = if namespace.is_empty() {
                     name.clone()
@@ -844,7 +863,10 @@ impl TypeRegistry {
                 self.extract_named_types(key);
                 self.extract_named_types(value);
             }
-            TypeDef::Function { params, return_type } => {
+            TypeDef::Function {
+                params,
+                return_type,
+            } => {
                 for param in params {
                     self.extract_named_types(&param.ty);
                 }
@@ -860,7 +882,11 @@ impl TypeRegistry {
                     self.extract_named_types(ty);
                 }
             }
-            TypeDef::GenericDef { name, type_params, def } => {
+            TypeDef::GenericDef {
+                name,
+                type_params,
+                def,
+            } => {
                 if !self.types.contains_key(name) {
                     self.types.insert(name.clone(), typedef.clone());
                     self.registration_order.push(name.clone());
@@ -879,7 +905,11 @@ impl TypeRegistry {
             }
             // IndexedAccess references a base type by name (similar to Ref)
             // Primitives, Refs, Literals, TypeParamRefs, and IndexedAccess have no nested named types
-            TypeDef::Primitive(_) | TypeDef::Ref(_) | TypeDef::Literal(_) | TypeDef::IndexedAccess { .. } | TypeDef::TypeParamRef(_) => {}
+            TypeDef::Primitive(_)
+            | TypeDef::Ref(_)
+            | TypeDef::Literal(_)
+            | TypeDef::IndexedAccess { .. }
+            | TypeDef::TypeParamRef(_) => {}
         }
     }
 
@@ -947,7 +977,10 @@ impl TypeRegistry {
                 self.collect_dependencies(key, deps);
                 self.collect_dependencies(value, deps);
             }
-            TypeDef::Function { params, return_type } => {
+            TypeDef::Function {
+                params,
+                return_type,
+            } => {
                 for param in params {
                     self.collect_dependencies(&param.ty, deps);
                 }
@@ -973,7 +1006,9 @@ impl TypeRegistry {
                     deps.insert(base.clone());
                 }
             }
-            TypeDef::GenericDef { type_params, def, .. } => {
+            TypeDef::GenericDef {
+                type_params, def, ..
+            } => {
                 // Don't add self as dependency, but check constraints, defaults, and inner def
                 for param in type_params {
                     if let Some(ref constraint) = param.constraint {
@@ -1010,7 +1045,10 @@ impl TypeRegistry {
             for dep in deps {
                 if let Some(dep_name) = self.types.get_key_value(&dep) {
                     *in_degree.get_mut(name.as_str()).unwrap() += 1;
-                    dependents.get_mut(dep_name.0.as_str()).unwrap().push(name.as_str());
+                    dependents
+                        .get_mut(dep_name.0.as_str())
+                        .unwrap()
+                        .push(name.as_str());
                 }
             }
         }
@@ -1029,7 +1067,10 @@ impl TypeRegistry {
         // Sort the initial queue by registration order for stable output
         let mut initial: Vec<_> = queue.drain(..).collect();
         initial.sort_by_key(|name| {
-            self.registration_order.iter().position(|n| n == *name).unwrap_or(usize::MAX)
+            self.registration_order
+                .iter()
+                .position(|n| n == *name)
+                .unwrap_or(usize::MAX)
         });
         queue.extend(initial);
 
@@ -1037,9 +1078,16 @@ impl TypeRegistry {
             result.push(name);
 
             // Get dependents sorted by registration order for stable output
-            let mut deps: Vec<_> = dependents.get(name).map(|v| v.as_slice()).unwrap_or(&[]).to_vec();
+            let mut deps: Vec<_> = dependents
+                .get(name)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[])
+                .to_vec();
             deps.sort_by_key(|n| {
-                self.registration_order.iter().position(|name| name == *n).unwrap_or(usize::MAX)
+                self.registration_order
+                    .iter()
+                    .position(|name| name == *n)
+                    .unwrap_or(usize::MAX)
             });
 
             for dependent in deps {
@@ -1100,7 +1148,13 @@ impl TypeRegistry {
         for name in sorted {
             if let Some(typedef) = self.types.get(name) {
                 match typedef {
-                    TypeDef::Named { namespace, name, def, wrapper, .. } => {
+                    TypeDef::Named {
+                        namespace,
+                        name,
+                        def,
+                        wrapper,
+                        ..
+                    } => {
                         let def_rendered = def.render();
                         let wrapped = match wrapper {
                             Some(w) => TypeDef::apply_wrapper(w, &def_rendered),
@@ -1115,7 +1169,11 @@ impl TypeRegistry {
                         }
                         output.push_str("\n\n");
                     }
-                    TypeDef::GenericDef { name, type_params, def } => {
+                    TypeDef::GenericDef {
+                        name,
+                        type_params,
+                        def,
+                    } => {
                         let params_str: Vec<_> = type_params.iter().map(|p| p.render()).collect();
                         output.push_str(&format!(
                             "export type {}<{}> = {};\n\n",
@@ -1354,9 +1412,7 @@ impl<A: TS, B: TS, C: TS, D: TS> TS for (A, B, C, D) {
     }
 }
 
-impl<A: TS, B: TS, C: TS, D: TS, E: TS> TS
-    for (A, B, C, D, E)
-{
+impl<A: TS, B: TS, C: TS, D: TS, E: TS> TS for (A, B, C, D, E) {
     fn typescript() -> TypeDef {
         TypeDef::Tuple(vec![
             A::typescript(),
@@ -1368,9 +1424,7 @@ impl<A: TS, B: TS, C: TS, D: TS, E: TS> TS
     }
 }
 
-impl<A: TS, B: TS, C: TS, D: TS, E: TS, F: TS>
-    TS for (A, B, C, D, E, F)
-{
+impl<A: TS, B: TS, C: TS, D: TS, E: TS, F: TS> TS for (A, B, C, D, E, F) {
     fn typescript() -> TypeDef {
         TypeDef::Tuple(vec![
             A::typescript(),
@@ -1401,7 +1455,10 @@ mod tests {
         assert_eq!(TypeDef::Primitive(Primitive::Number).render(), "number");
         assert_eq!(TypeDef::Primitive(Primitive::Boolean).render(), "boolean");
         assert_eq!(TypeDef::Primitive(Primitive::Null).render(), "null");
-        assert_eq!(TypeDef::Primitive(Primitive::Undefined).render(), "undefined");
+        assert_eq!(
+            TypeDef::Primitive(Primitive::Undefined).render(),
+            "undefined"
+        );
         assert_eq!(TypeDef::Primitive(Primitive::Void).render(), "void");
         assert_eq!(TypeDef::Primitive(Primitive::Never).render(), "never");
         assert_eq!(TypeDef::Primitive(Primitive::Any).render(), "any");
@@ -1445,9 +1502,11 @@ mod tests {
 
     #[test]
     fn test_typedef_object_readonly_field() {
-        let obj = TypeDef::Object(vec![
-            Field::new("id", TypeDef::Primitive(Primitive::String)).readonly(),
-        ]);
+        let obj = TypeDef::Object(vec![Field::new(
+            "id",
+            TypeDef::Primitive(Primitive::String),
+        )
+        .readonly()]);
         assert_eq!(obj.render(), "{ readonly id: string }");
     }
 
@@ -1465,9 +1524,10 @@ mod tests {
     fn test_typedef_intersection_render() {
         let intersection = TypeDef::Intersection(vec![
             TypeDef::Ref("Base".into()),
-            TypeDef::Object(vec![
-                Field::new("extra", TypeDef::Primitive(Primitive::String)),
-            ]),
+            TypeDef::Object(vec![Field::new(
+                "extra",
+                TypeDef::Primitive(Primitive::String),
+            )]),
         ]);
         assert_eq!(intersection.render(), "Base & { extra: string }");
     }
@@ -1557,9 +1617,10 @@ mod tests {
         let wrapped = TypeDef::Named {
             namespace: vec![],
             name: "Config".into(),
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("theme", TypeDef::Primitive(Primitive::String)),
-            ])),
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "theme",
+                TypeDef::Primitive(Primitive::String),
+            )])),
             module: None,
             wrapper: Some("Prettify<Required<".to_string()),
         };
@@ -1608,9 +1669,12 @@ mod tests {
 
     #[test]
     fn test_typedef_literal_render() {
-        assert_eq!(TypeDef::Literal(Literal::String("foo".into())).render(), "\"foo\"");
+        assert_eq!(
+            TypeDef::Literal(Literal::String("foo".into())).render(),
+            "\"foo\""
+        );
         assert_eq!(TypeDef::Literal(Literal::Number(42.0)).render(), "42");
-        assert_eq!(TypeDef::Literal(Literal::Number(3.14)).render(), "3.14");
+        assert_eq!(TypeDef::Literal(Literal::Number(3.15)).render(), "3.15");
         assert_eq!(TypeDef::Literal(Literal::Boolean(true)).render(), "true");
         assert_eq!(TypeDef::Literal(Literal::Boolean(false)).render(), "false");
     }
@@ -2065,9 +2129,10 @@ mod tests {
         let b = TypeDef::Named {
             namespace: vec![],
             name: "B".to_string(),
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("c", TypeDef::Ref("C".to_string())),
-            ])),
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "c",
+                TypeDef::Ref("C".to_string()),
+            )])),
             module: None,
             wrapper: None,
         };
@@ -2075,9 +2140,10 @@ mod tests {
         let a = TypeDef::Named {
             namespace: vec![],
             name: "A".to_string(),
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("b", TypeDef::Ref("B".to_string())),
-            ])),
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "b",
+                TypeDef::Ref("B".to_string()),
+            )])),
             module: None,
             wrapper: None,
         };
@@ -2134,7 +2200,10 @@ mod tests {
         let profile_pos = sorted.iter().position(|&n| n == "Profile").unwrap();
         let user_login_pos = sorted.iter().position(|&n| n == "UserLogin").unwrap();
 
-        assert!(profile_pos < user_login_pos, "Profile should come before UserLogin");
+        assert!(
+            profile_pos < user_login_pos,
+            "Profile should come before UserLogin"
+        );
     }
 
     // ========================================================================
@@ -2143,6 +2212,7 @@ mod tests {
 
     // Test types for auto-registration
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct AutoRegTestUser {
         name: String,
         age: u32,
@@ -2172,8 +2242,10 @@ mod tests {
         let registry = TypeRegistry::from_distributed();
 
         // The registry should contain our test type
-        assert!(registry.get("AutoRegTestUser").is_some(),
-            "Registry should contain AutoRegTestUser");
+        assert!(
+            registry.get("AutoRegTestUser").is_some(),
+            "Registry should contain AutoRegTestUser"
+        );
     }
 
     #[test]
@@ -2194,10 +2266,14 @@ mod tests {
         registry.collect_all();
 
         // Should have both the manual type and auto-registered types
-        assert!(registry.get("ManualType").is_some(),
-            "Registry should contain ManualType");
-        assert!(registry.get("AutoRegTestUser").is_some(),
-            "Registry should contain AutoRegTestUser from distributed slice");
+        assert!(
+            registry.get("ManualType").is_some(),
+            "Registry should contain ManualType"
+        );
+        assert!(
+            registry.get("AutoRegTestUser").is_some(),
+            "Registry should contain AutoRegTestUser from distributed slice"
+        );
     }
 
     #[test]
@@ -2226,9 +2302,10 @@ mod tests {
 
     #[test]
     fn test_type_param_with_object_constraint() {
-        let param = TypeParam::new("T").with_constraint(TypeDef::Object(vec![
-            Field::new("type", TypeDef::Primitive(Primitive::String)),
-        ]));
+        let param = TypeParam::new("T").with_constraint(TypeDef::Object(vec![Field::new(
+            "type",
+            TypeDef::Primitive(Primitive::String),
+        )]));
         assert_eq!(param.render(), "T extends { type: string }");
     }
 
@@ -2272,9 +2349,10 @@ mod tests {
             type_params: vec![TypeParam::new("T").with_constraint(TypeDef::Object(vec![
                 Field::new("type", TypeDef::Primitive(Primitive::String)),
             ]))],
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("data", TypeDef::TypeParamRef("T".into())),
-            ])),
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "data",
+                TypeDef::TypeParamRef("T".into()),
+            )])),
         };
         assert_eq!(
             generic_def.render_declaration(),
@@ -2394,9 +2472,10 @@ mod tests {
             type_params: vec![TypeParam::new("T").with_constraint(TypeDef::Object(vec![
                 Field::new("type", TypeDef::Primitive(Primitive::String)),
             ]))],
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("data", TypeDef::TypeParamRef("T".into())),
-            ])),
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "data",
+                TypeDef::TypeParamRef("T".into()),
+            )])),
         };
         registry.add_typedef(core_def);
 
@@ -2423,10 +2502,13 @@ mod tests {
         // Then define a generic using that type as a constraint
         let core_def = TypeDef::GenericDef {
             name: "Core".into(),
-            type_params: vec![TypeParam::new("T").with_constraint(TypeDef::Ref("Discriminant".into()))],
-            def: Box::new(TypeDef::Object(vec![
-                Field::new("data", TypeDef::TypeParamRef("T".into())),
-            ])),
+            type_params: vec![
+                TypeParam::new("T").with_constraint(TypeDef::Ref("Discriminant".into()))
+            ],
+            def: Box::new(TypeDef::Object(vec![Field::new(
+                "data",
+                TypeDef::TypeParamRef("T".into()),
+            )])),
         };
 
         registry.add_typedef(core_def);
@@ -2437,7 +2519,10 @@ mod tests {
         // Discriminant should come before Core
         let discrim_pos = sorted.iter().position(|&n| n == "Discriminant").unwrap();
         let core_pos = sorted.iter().position(|&n| n == "Core").unwrap();
-        assert!(discrim_pos < core_pos, "Discriminant should come before Core");
+        assert!(
+            discrim_pos < core_pos,
+            "Discriminant should come before Core"
+        );
     }
 
     #[test]

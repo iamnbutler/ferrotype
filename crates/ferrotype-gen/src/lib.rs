@@ -261,11 +261,12 @@ impl Generator {
     /// - No output path is configured
     /// - The file cannot be written
     pub fn write(&self) -> std::io::Result<()> {
-        let output_path = self
-            .config
-            .output
-            .as_ref()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "No output path configured"))?;
+        let output_path = self.config.output.as_ref().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "No output path configured",
+            )
+        })?;
 
         // Create parent directories
         if let Some(parent) = output_path.parent() {
@@ -289,11 +290,12 @@ impl Generator {
     /// - No output path is configured
     /// - The file cannot be read or written
     pub fn write_if_changed(&self) -> std::io::Result<bool> {
-        let output_path = self
-            .config
-            .output
-            .as_ref()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "No output path configured"))?;
+        let output_path = self.config.output.as_ref().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "No output path configured",
+            )
+        })?;
 
         let new_content = self.generate();
 
@@ -396,13 +398,18 @@ impl Generator {
 
         // Render types
         for name in module_types {
-            if let Some(typedef) = self.registry.get(name) {
-                if let TypeDef::Named { name, def, .. } = typedef {
+            if let Some(TypeDef::Named { name, def, .. }) = self.registry.get(name) {
+                {
                     let export_prefix = match self.config.export_style {
                         ExportStyle::None => "",
                         ExportStyle::Named | ExportStyle::Grouped => "export ",
                     };
-                    output.push_str(&format!("{}type {} = {};\n\n", export_prefix, name, def.render()));
+                    output.push_str(&format!(
+                        "{}type {} = {};\n\n",
+                        export_prefix,
+                        name,
+                        def.render()
+                    ));
                 }
             }
         }
@@ -458,7 +465,10 @@ impl Generator {
     /// Write multi-file only if content has changed
     ///
     /// Returns the number of files that were written (changed).
-    pub fn write_multi_file_if_changed(&self, output_dir: impl AsRef<Path>) -> std::io::Result<usize> {
+    pub fn write_multi_file_if_changed(
+        &self,
+        output_dir: impl AsRef<Path>,
+    ) -> std::io::Result<usize> {
         let output_dir = output_dir.as_ref();
         let types_by_module = self.types_by_module();
         let mut count = 0;
@@ -680,7 +690,7 @@ mod tests {
         let generator = Generator::new(
             Config::new()
                 .export_style(ExportStyle::None)
-                .include_utilities()
+                .include_utilities(),
         );
 
         let output = generator.generate();
@@ -842,10 +852,22 @@ mod tests {
         let by_module = generator.types_by_module();
 
         assert_eq!(by_module.len(), 3);
-        assert!(by_module.get("my_crate::models").unwrap().contains(&"User".to_string()));
-        assert!(by_module.get("my_crate::models").unwrap().contains(&"Post".to_string()));
-        assert!(by_module.get("my_crate::api").unwrap().contains(&"Request".to_string()));
-        assert!(by_module.get("default").unwrap().contains(&"Orphan".to_string()));
+        assert!(by_module
+            .get("my_crate::models")
+            .unwrap()
+            .contains(&"User".to_string()));
+        assert!(by_module
+            .get("my_crate::models")
+            .unwrap()
+            .contains(&"Post".to_string()));
+        assert!(by_module
+            .get("my_crate::api")
+            .unwrap()
+            .contains(&"Request".to_string()));
+        assert!(by_module
+            .get("default")
+            .unwrap()
+            .contains(&"Orphan".to_string()));
     }
 
     #[test]
@@ -867,7 +889,10 @@ mod tests {
             wrapper: None,
         });
 
-        let output = generator.generate_for_module("my_crate::models", &["User".to_string(), "Post".to_string()]);
+        let output = generator.generate_for_module(
+            "my_crate::models",
+            &["User".to_string(), "Post".to_string()],
+        );
 
         assert!(output.contains("// Module: my_crate::models"));
         assert!(output.contains("export type User = string;"));
@@ -927,11 +952,15 @@ mod tests {
         });
 
         // First write should write
-        let count1 = generator.write_multi_file_if_changed(temp_dir.path()).unwrap();
+        let count1 = generator
+            .write_multi_file_if_changed(temp_dir.path())
+            .unwrap();
         assert_eq!(count1, 1);
 
         // Second write should not write (unchanged)
-        let count2 = generator.write_multi_file_if_changed(temp_dir.path()).unwrap();
+        let count2 = generator
+            .write_multi_file_if_changed(temp_dir.path())
+            .unwrap();
         assert_eq!(count2, 0);
 
         // Add another type
@@ -944,7 +973,9 @@ mod tests {
         });
 
         // Third write should write (changed)
-        let count3 = generator.write_multi_file_if_changed(temp_dir.path()).unwrap();
+        let count3 = generator
+            .write_multi_file_if_changed(temp_dir.path())
+            .unwrap();
         assert_eq!(count3, 1);
     }
 

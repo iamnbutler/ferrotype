@@ -26,7 +26,10 @@ use swc_core::ecma::parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax
 /// ```
 pub fn parse_typescript(source: &str) -> Result<Module, String> {
     let cm: Lrc<SourceMap> = Default::default();
-    let fm = cm.new_source_file(Lrc::new(FileName::Custom("input.ts".into())), source.to_string());
+    let fm = cm.new_source_file(
+        Lrc::new(FileName::Custom("input.ts".into())),
+        source.to_string(),
+    );
 
     let lexer = Lexer::new(
         Syntax::Typescript(TsSyntax {
@@ -42,7 +45,9 @@ pub fn parse_typescript(source: &str) -> Result<Module, String> {
     );
 
     let mut parser = Parser::new_from(lexer);
-    parser.parse_module().map_err(|e| format!("Parse error: {:?}", e))
+    parser
+        .parse_module()
+        .map_err(|e| format!("Parse error: {:?}", e))
 }
 
 #[cfg(test)]
@@ -58,14 +63,22 @@ mod tests {
             }
         "#;
         let result = parse_typescript(source);
-        assert!(result.is_ok(), "Failed to parse interface: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse interface: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_parse_type_alias() {
         let source = "type UserId = string;";
         let result = parse_typescript(source);
-        assert!(result.is_ok(), "Failed to parse type alias: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse type alias: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -77,7 +90,11 @@ mod tests {
             }
         "#;
         let result = parse_typescript(source);
-        assert!(result.is_ok(), "Failed to parse optional field: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse optional field: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -88,14 +105,22 @@ mod tests {
             }
         "#;
         let result = parse_typescript(source);
-        assert!(result.is_ok(), "Failed to parse array type: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse array type: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_parse_union_type() {
         let source = "type Result = string | number | null;";
         let result = parse_typescript(source);
-        assert!(result.is_ok(), "Failed to parse union type: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse union type: {:?}",
+            result.err()
+        );
     }
 
     #[test]

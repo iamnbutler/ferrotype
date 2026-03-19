@@ -27,13 +27,13 @@
 //! // }
 //! ```
 
-mod parser;
-mod converter;
 mod codegen;
+mod converter;
+mod parser;
 
-pub use parser::parse_typescript;
-pub use converter::convert_module;
 pub use codegen::generate_rust_from_types;
+pub use converter::convert_module;
+pub use parser::parse_typescript;
 
 use ferro_type::TypeDef;
 

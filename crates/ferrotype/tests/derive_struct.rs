@@ -1,6 +1,7 @@
 //! Tests for #[derive(TS)] on structs
+#![allow(dead_code)]
 
-use ferro_type::{TS, TypeDef, TypeRegistry};
+use ferro_type::{TypeDef, TypeRegistry, TS};
 
 /// Helper to get the inner definition from a Named TypeDef
 fn inner_def(td: TypeDef) -> TypeDef {
@@ -236,7 +237,10 @@ fn test_type_rename() {
     let td = UserWithRenamedType::typescript();
     // The TypeDef should use the renamed type name
     assert_eq!(td.render(), "RenamedUser");
-    assert_eq!(td.render_declaration(), "type RenamedUser = { id: string; name: string };");
+    assert_eq!(
+        td.render_declaration(),
+        "type RenamedUser = { id: string; name: string };"
+    );
 }
 
 #[derive(TS)]
@@ -795,7 +799,10 @@ struct SemVer(String);
 fn test_template_literal_semver() {
     let td = SemVer::typescript();
     assert_eq!(td.render(), "SemVer");
-    assert_eq!(td.render_declaration(), "type SemVer = `v${number}.${number}.${number}`;");
+    assert_eq!(
+        td.render_declaration(),
+        "type SemVer = `v${number}.${number}.${number}`;"
+    );
 }
 
 #[derive(TS)]
@@ -815,7 +822,10 @@ struct UserIdPattern(String);
 #[test]
 fn test_template_literal_prefix_suffix() {
     let td = UserIdPattern::typescript();
-    assert_eq!(td.render_declaration(), "type UserIdPattern = `user-${string}-id`;");
+    assert_eq!(
+        td.render_declaration(),
+        "type UserIdPattern = `user-${string}-id`;"
+    );
 }
 
 #[derive(TS)]
@@ -827,7 +837,10 @@ fn test_template_literal_with_rename() {
     let td = ProductId::typescript();
     // Rename should apply to the type name
     assert_eq!(td.render(), "ProductID");
-    assert_eq!(td.render_declaration(), "type ProductID = `prod_${string}`;");
+    assert_eq!(
+        td.render_declaration(),
+        "type ProductID = `prod_${string}`;"
+    );
 }
 
 #[derive(TS)]
